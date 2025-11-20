@@ -1,0 +1,36 @@
+# CelHM API Backend
+# Archivos y carpetas que NO se subirán a Render
+
+# Dependencias
+node_modules/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Archivos de entorno local
+.env
+.env.local
+.env.development
+
+# Archivos del sistema
+.DS_Store
+Thumbs.db
+
+# Archivos de IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Archivos temporales
+tmp/
+temp/
+
+# Archivos de build
+dist/
+build/
+
+# Archivos de configuración local
+config.env

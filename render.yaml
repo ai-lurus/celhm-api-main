@@ -1,0 +1,8 @@
+# Render Build Configuration
+# Este archivo le dice a Render cómo construir y ejecutar la aplicación
+
+# Comando de construcción (opcional para Node.js)
+# build: npm install
+
+# Comando de inicio
+start: node server.js
