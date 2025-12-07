@@ -1,0 +1,523 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../node_modules/.prisma/client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
+}
+
+// ===== ENUMS =====
+
+enum Role {
+  DIRECCION
+  ADMON
+  LABORATORIO
+  ADMINISTRADOR
+  RECEPCIONISTA
+  TECNICO
+}
+
+enum TicketState {
+  RECIBIDO
+  DIAGNOSTICO
+  ESPERANDO_PIEZA
+  EN_REPARACION
+  REPARADO
+  ENTREGADO
+  CANCELADO
+}
+
+enum MovementType {
+  ING
+  EGR
+  VTA
+  AJU
+  TRF_OUT
+  TRF_IN
+}
+
+enum TicketPartState {
+  RESERVADA
+  CONSUMIDA
+  LIBERADA
+}
+
+enum NotificationChannel {
+  EMAIL
+  SMS
+  WHATSAPP
+}
+
+enum PaymentMethod {
+  EFECTIVO
+  TARJETA
+  TRANSFERENCIA
+  CHEQUE
+  OTRO
+}
+
+enum SaleStatus {
+  PENDIENTE
+  PAGADO
+  CANCELADO
+}
+
+// ===== ORGANIZATION & TENANT =====
+
+model Organization {
+  id        Int       @id @default(autoincrement())
+  name      String
+  slug      String    @unique
+  users     OrgMembership[]
+  defaultUsers User[] @relation("DefaultOrganization")
+  branches  Branch[]
+  templates NotificationTemplate[]
+  customers Customer[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@map("organizations")
+}
+
+model OrgMembership {
+  id             Int     @id @default(autoincrement())
+  organizationId Int
+  userId         Int
+  role           Role
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([organizationId, userId])
+  @@map("org_memberships")
+}
+
+// ===== USERS =====
+
+model User {
+  id                   Int      @id @default(autoincrement())
+  authUserId           String?  @unique // Supabase Auth UUID
+  email                String?  @unique
+  name                 String?
+  password             String?  // Hashed password for local auth (optional if using Supabase Auth)
+  defaultOrganizationId Int?
+  defaultOrganization   Organization? @relation("DefaultOrganization", fields: [defaultOrganizationId], references: [id])
+  role                 Role // rol por defecto; permisos finos por OrgMembership
+  branchId             Int?
+  branch               Branch?  @relation(fields: [branchId], references: [id])
+  memberships          OrgMembership[]
+  movements            Movement[]
+  tickets              Ticket[]
+  ticketHistory        TicketHistory[]
+  sales                Sale[]
+  payments             Payment[]
+  cashCuts             CashCut[]
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@map("users")
+}
+
+// ===== BRANCHES =====
+
+model Branch {
+  id             Int       @id @default(autoincrement())
+  organizationId Int
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  code           String
+  name           String
+  address        String?
+  phone          String?
+  email          String?
+  active         Boolean   @default(true)
+  users          User[]
+  stocks         Stock[]
+  movements      Movement[]
+  tickets        Ticket[]
+  folioSequences FolioSequence[]
+  customers      Customer[]
+  sales          Sale[]
+  cashRegisters  CashRegister[]
+  cashCuts       CashCut[]
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([organizationId, code])
+  @@map("branches")
+}
+
+// ===== CATALOG =====
+
+model Product {
+  id          Int       @id @default(autoincrement())
+  name        String
+  description String?
+  category    String?
+  brand       String?
+  model       String?
+  variants    Variant[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@map("products")
+}
+
+model Variant {
+  id          Int      @id @default(autoincrement())
+  productId   Int
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  sku         String   @unique
+  name        String
+  description String?
+  brand       String?
+  model       String?
+  color       String?
+  size        String?
+  weight      Float?
+  dimensions  String?
+  price        Decimal? @db.Decimal(10, 2) // Precio de venta
+  purchasePrice Decimal? @db.Decimal(10, 2) // Precio de compra
+  barcode      String?  // Código de barras
+  stocks       Stock[]
+  movements    Movement[]
+  ticketParts  TicketPart[]
+  saleLines    SaleLine[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("variants")
+}
+
+// ===== INVENTORY =====
+
+model Stock {
+  id        Int     @id @default(autoincrement())
+  branchId  Int
+  variantId Int
+  branch    Branch  @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  variant   Variant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  qty       Int     @default(0)
+  min       Int     @default(0)
+  max       Int     @default(1000)
+  reserved  Int     @default(0) // Cantidad reservada en tickets
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([branchId, variantId])
+  @@map("stocks")
+}
+
+model Movement {
+  id          Int          @id @default(autoincrement())
+  branchId    Int
+  variantId   Int
+  branch      Branch       @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  variant     Variant      @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  type        MovementType
+  qty         Int
+  reason      String?
+  folio       String?
+  ticketId    Int?
+  ticket      Ticket?      @relation(fields: [ticketId], references: [id])
+  userId      Int?
+  user        User?        @relation(fields: [userId], references: [id])
+  ip          String?
+  userAgent   String?
+  createdAt   DateTime     @default(now())
+
+  @@index([branchId, createdAt])
+  @@index([folio])
+  @@map("movements")
+}
+
+// ===== CUSTOMERS =====
+
+model Customer {
+  id          Int       @id @default(autoincrement())
+  organizationId Int
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  branchId    Int?
+  branch      Branch?   @relation(fields: [branchId], references: [id])
+  name        String
+  phone       String    // Obligatorio según RF-CLI-01
+  email       String?
+  notes       String?
+  isWholesale Boolean   @default(false) // Para RF-CLI-04 (Fase 2)
+  isCorporate Boolean   @default(false) // Para RF-CLI-04 (Fase 2)
+  tickets     Ticket[]
+  sales       Sale[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([organizationId, phone])
+  @@index([organizationId, email])
+  @@index([organizationId, name])
+  @@map("customers")
+}
+
+// ===== DEVICE CATALOG =====
+
+model DeviceBrand {
+  id        Int          @id @default(autoincrement())
+  name      String       @unique
+  models    DeviceModel[]
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  @@map("device_brands")
+}
+
+model DeviceModel {
+  id        Int         @id @default(autoincrement())
+  brandId   Int
+  brand     DeviceBrand @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  name      String
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  @@unique([brandId, name])
+  @@map("device_models")
+}
+
+// ===== TICKETS =====
+
+model Ticket {
+  id              Int            @id @default(autoincrement())
+  branchId        Int
+  branch          Branch         @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  folio           String         @unique
+  customerId      Int?
+  customer        Customer?      @relation(fields: [customerId], references: [id])
+  customerName    String         // Mantener para compatibilidad
+  customerPhone   String?
+  customerEmail   String?
+  device          String
+  brand           String?
+  model           String?
+  serialNumber    String?
+  imei            String?        // RF-DEV-01
+  problem         String
+  diagnosis       String?
+  solution        String?
+  state           TicketState    @default(RECIBIDO)
+  estimatedCost   Decimal?       @db.Decimal(10, 2)
+  finalCost       Decimal?       @db.Decimal(10, 2)
+  advancePayment  Decimal?       @db.Decimal(10, 2) // RF-ORD-05: Anticipos
+  internalNotes   String?        // RF-ORD-06: Notas internas
+  estimatedTime   Int?           // días
+  warrantyDays    Int            @default(15)
+  movements       Movement[]
+  parts           TicketPart[]
+  history         TicketHistory[]
+  sales           Sale[]         // Relación con ventas
+  userId          Int?
+  user            User?          @relation(fields: [userId], references: [id])
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@index([branchId, state])
+  @@index([folio])
+  @@index([customerId])
+  @@index([imei])
+  @@map("tickets")
+}
+
+model TicketPart {
+  id        Int             @id @default(autoincrement())
+  ticketId  Int
+  variantId Int
+  ticket    Ticket          @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  variant   Variant         @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  qty       Int
+  state     TicketPartState @default(RESERVADA)
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  @@unique([ticketId, variantId])
+  @@map("ticket_parts")
+}
+
+model TicketHistory {
+  id          Int        @id @default(autoincrement())
+  ticketId    Int
+  ticket      Ticket     @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  fromState   TicketState?
+  toState     TicketState
+  notes       String?
+  userId      Int?
+  user        User?      @relation(fields: [userId], references: [id])
+  ip          String?
+  userAgent   String?
+  createdAt   DateTime   @default(now())
+
+  @@index([ticketId, createdAt])
+  @@map("ticket_history")
+}
+
+// ===== FOLIOS =====
+
+model FolioSequence {
+  id       Int    @id @default(autoincrement())
+  branchId Int
+  branch   Branch @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  prefix   String
+  period   String // YYYYMM
+  seq      Int    @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([prefix, branchId, period])
+  @@map("folio_sequences")
+}
+
+// ===== NOTIFICATIONS =====
+
+model NotificationTemplate {
+  id             Int                 @id @default(autoincrement())
+  organizationId Int
+  organization   Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  channel        NotificationChannel
+  code           String             // p.ej. "ticket_state_changed"
+  name           String
+  bodyMdx        String             // MDX con {{variables}}
+  locale         String             @default("es-MX")
+  active         Boolean            @default(true)
+  notifications  Notification[]
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  @@unique([organizationId, channel, code])
+  @@map("notification_templates")
+}
+
+model Notification {
+  id         Int                 @id @default(autoincrement())
+  templateId Int?
+  template   NotificationTemplate? @relation(fields: [templateId], references: [id])
+  channel    NotificationChannel
+  recipient  String              // email, phone, etc.
+  subject    String?
+  body       String
+  status     String              @default("pending") // pending, sent, failed, mocked
+  error      String?
+  metadata   Json?               // additional data
+  createdAt  DateTime            @default(now())
+  sentAt     DateTime?
+
+  @@index([status, createdAt])
+  @@map("notifications")
+}
+
+// ===== SALES =====
+
+model Sale {
+  id            Int          @id @default(autoincrement())
+  branchId      Int
+  branch        Branch       @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  folio         String       @unique
+  customerId    Int?
+  customer      Customer?    @relation(fields: [customerId], references: [id])
+  ticketId      Int?         // RF-VEN-04: Relación con orden de reparación
+  ticket        Ticket?      @relation(fields: [ticketId], references: [id])
+  status        SaleStatus   @default(PENDIENTE)
+  subtotal      Decimal      @db.Decimal(10, 2)
+  discount      Decimal      @default(0) @db.Decimal(10, 2) // Descuento por venta (RF-VEN-03)
+  total         Decimal      @db.Decimal(10, 2)
+  userId        Int?
+  user          User?        @relation(fields: [userId], references: [id])
+  lines         SaleLine[]
+  payments      Payment[]
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  @@index([branchId, createdAt])
+  @@index([folio])
+  @@index([ticketId])
+  @@index([customerId])
+  @@map("sales")
+}
+
+model SaleLine {
+  id          Int      @id @default(autoincrement())
+  saleId      Int
+  sale        Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  variantId   Int?
+  variant     Variant?  @relation(fields: [variantId], references: [id])
+  description String   // Descripción del concepto
+  qty         Int      @default(1)
+  unitPrice   Decimal  @db.Decimal(10, 2)
+  discount    Decimal  @default(0) @db.Decimal(10, 2) // Descuento por línea (RF-VEN-03)
+  total       Decimal  @db.Decimal(10, 2)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([saleId])
+  @@map("sale_lines")
+}
+
+model Payment {
+  id            Int           @id @default(autoincrement())
+  saleId        Int
+  sale          Sale          @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  amount        Decimal       @db.Decimal(10, 2)
+  method        PaymentMethod
+  reference     String?       // Referencia de pago (número de tarjeta, transferencia, etc.)
+  userId        Int?
+  user          User?         @relation(fields: [userId], references: [id])
+  createdAt     DateTime      @default(now())
+
+  @@index([saleId])
+  @@index([createdAt])
+  @@map("payments")
+}
+
+// ===== CASH REGISTER =====
+
+model CashRegister {
+  id          Int        @id @default(autoincrement())
+  branchId    Int
+  branch      Branch     @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  code        String     // Código de la caja (ej. "CAJA-1")
+  name        String
+  active      Boolean    @default(true)
+  cuts        CashCut[]
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@unique([branchId, code])
+  @@map("cash_registers")
+}
+
+model CashCut {
+  id              Int           @id @default(autoincrement())
+  cashRegisterId  Int
+  cashRegister    CashRegister  @relation(fields: [cashRegisterId], references: [id], onDelete: Cascade)
+  branchId        Int
+  branch          Branch        @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  date            DateTime      @db.Date
+  initialAmount    Decimal       @default(0) @db.Decimal(10, 2)
+  salesCash       Decimal       @default(0) @db.Decimal(10, 2) // Ventas en efectivo
+  salesCard       Decimal       @default(0) @db.Decimal(10, 2) // Ventas en tarjeta
+  salesTransfer   Decimal       @default(0) @db.Decimal(10, 2) // Ventas en transferencia
+  advances        Decimal       @default(0) @db.Decimal(10, 2) // Anticipos recibidos
+  adjustments     Decimal       @default(0) @db.Decimal(10, 2) // Ajustes (retiros, etc.)
+  totalIncome     Decimal       @db.Decimal(10, 2)
+  finalAmount     Decimal       @db.Decimal(10, 2)
+  notes           String?
+  userId          Int?
+  user            User?         @relation(fields: [userId], references: [id])
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@unique([cashRegisterId, date])
+  @@index([branchId, date])
+  @@map("cash_cuts")
+}
+

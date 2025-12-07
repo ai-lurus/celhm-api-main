@@ -1,0 +1,23 @@
+{
+  "name": "@celhm/prisma",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "postinstall": "node -e \"try { require('child_process').execSync('prisma generate', {stdio: 'inherit'}) } catch(e) { console.log('Prisma not available, skipping generate') }\"",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:seed": "tsx seed.ts",
+    "db:studio": "prisma studio",
+    "db:reset": "prisma migrate reset --force",
+    "db:deploy": "prisma migrate deploy"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.22.0",
+    "bcryptjs": "^2.4.3"
+  },
+  "devDependencies": {
+    "prisma": "^5.7.1",
+    "tsx": "^4.6.2",
+    "typescript": "^5.3.3"
+  }
+}
