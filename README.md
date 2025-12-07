@@ -2,6 +2,10 @@
 
 API REST para el sistema de gestión de talleres de reparación de celulares.
 
+## Versión
+
+**v1.0.1** - Build optimizado y limpieza de archivos temporales
+
 ## Stack Tecnológico
 
 - **NestJS** - Framework Node.js
