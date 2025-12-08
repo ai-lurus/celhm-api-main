@@ -16,21 +16,33 @@ export class AuthController {
   @ApiResponse({ status: 200, description: 'Login successful' })
   @ApiResponse({ status: 401, description: 'Invalid credentials' })
   async login(@Body() loginDto: LoginDto) {
-    // Log received data for debugging
-    console.log('📥 Login request received:', {
-      email: loginDto.email,
-      passwordLength: loginDto.password?.length,
-      passwordFirstChars: loginDto.password?.substring(0, 10),
-      passwordLastChars: loginDto.password?.substring(Math.max(0, (loginDto.password?.length || 0) - 10)),
-    });
-    
-    const user = await this.authService.validateUser(loginDto.email, loginDto.password);
-    if (!user) {
-      console.log('❌ Login failed for:', loginDto.email);
-      throw new UnauthorizedException('Invalid credentials');
+    try {
+      // Log received data for debugging
+      console.log('📥 Login request received:', {
+        email: loginDto.email,
+        passwordLength: loginDto.password?.length,
+      });
+      
+      const user = await this.authService.validateUser(loginDto.email, loginDto.password);
+      if (!user) {
+        console.log('❌ Login failed for:', loginDto.email);
+        throw new UnauthorizedException('Invalid credentials');
+      }
+      console.log('✅ Login successful for:', loginDto.email);
+      return this.authService.login(user);
+    } catch (error: any) {
+      console.error('❌ Error in login:', error);
+      console.error('   Message:', error.message);
+      console.error('   Stack:', error.stack);
+      
+      // If it's already an HttpException, re-throw it
+      if (error instanceof UnauthorizedException) {
+        throw error;
+      }
+      
+      // For other errors, throw a generic error but log the details
+      throw new Error(`Login error: ${error.message}`);
     }
-    console.log('✅ Login successful for:', loginDto.email);
-    return this.authService.login(user);
   }
 
   @Get('me')

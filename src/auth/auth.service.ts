@@ -21,22 +21,20 @@ export class AuthService {
   ) {}
 
   async validateUser(email: string, password: string): Promise<AuthUser | null> {
-    // Log for debugging (temporary - enable in production for troubleshooting)
-    console.log('🔐 Validating user:', email);
-    console.log('🔐 Password received length:', password.length);
-    console.log('🔐 Password received (first 10 chars):', password.substring(0, 10));
-    console.log('🔐 Password received (last 10 chars):', password.substring(Math.max(0, password.length - 10)));
+    try {
+      // Log for debugging
+      console.log('🔐 Validating user:', email);
 
-    // Find user by email
-    const user = await this.prisma.user.findUnique({
-      where: { email },
-      include: {
-        memberships: {
-          include: { organization: true },
+      // Find user by email
+      const user = await this.prisma.user.findUnique({
+        where: { email },
+        include: {
+          memberships: {
+            include: { organization: true },
+          },
+          branch: true,
         },
-        branch: true,
-      },
-    });
+      });
 
     if (!user) {
       console.log('❌ User not found:', email);
@@ -100,6 +98,16 @@ export class AuthService {
       organizationId: membership.organizationId,
       branchId: user.branchId || undefined,
     };
+    } catch (error: any) {
+      console.error('❌ Error in validateUser:', error);
+      console.error('   Message:', error.message);
+      console.error('   Code:', error.code);
+      if (error.meta) {
+        console.error('   Meta:', JSON.stringify(error.meta, null, 2));
+      }
+      // Re-throw to be caught by controller
+      throw error;
+    }
   }
 
   async login(user: AuthUser) {
