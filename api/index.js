@@ -9,9 +9,26 @@ async function bootstrap() {
   if (!cachedApp) {
     console.log('🚀 [BOOTSTRAP] Creating NestJS application for Vercel...');
     
+    // Log environment variables status (without sensitive data)
+    console.log('📋 [BOOTSTRAP] Environment check:');
+    console.log('   VERCEL:', process.env.VERCEL || 'not set');
+    console.log('   NODE_ENV:', process.env.NODE_ENV || 'not set');
+    console.log('   DATABASE_URL:', process.env.DATABASE_URL ? '✅ configured' : '❌ NOT SET');
+    if (process.env.DATABASE_URL) {
+      try {
+        const url = new URL(process.env.DATABASE_URL);
+        console.log('   DB Host:', url.hostname);
+        console.log('   DB Port:', url.port || '5432');
+        console.log('   DB Database:', url.pathname.replace('/', '') || 'postgres');
+      } catch (e) {
+        console.log('   DB URL: ⚠️ Invalid format');
+      }
+    }
+    console.log('   JWT_SECRET:', process.env.JWT_SECRET ? '✅ configured' : '❌ NOT SET');
+    
     // Create NestJS app (it uses Express by default)
     const app = await NestFactory.create(AppModule, {
-      logger: ['error', 'warn'],
+      logger: ['error', 'warn', 'log'], // Include 'log' to see PrismaService logs
     });
     
     // Enable CORS - Allow all origins in production for now, can be restricted later

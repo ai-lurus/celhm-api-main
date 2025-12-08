@@ -24,6 +24,26 @@ export class AuthService {
     try {
       // Log for debugging
       console.log('🔐 Validating user:', email);
+      
+      // Log DATABASE_URL status (without password) for debugging
+      const dbUrl = process.env.DATABASE_URL;
+      if (dbUrl) {
+        try {
+          const url = new URL(dbUrl);
+          console.log('🔌 [AUTH] DB Connection info:', {
+            host: url.hostname,
+            port: url.port || '5432',
+            user: url.username,
+            database: url.pathname.replace('/', ''),
+            ssl: url.searchParams.get('sslmode') || 'not set',
+            vercel: !!process.env.VERCEL
+          });
+        } catch (e) {
+          console.log('⚠️ [AUTH] Could not parse DATABASE_URL');
+        }
+      } else {
+        console.error('❌ [AUTH] DATABASE_URL is not set!');
+      }
 
       // Find user by email
       const user = await this.prisma.user.findUnique({

@@ -6,26 +6,65 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
   private readonly logger = new Logger(PrismaService.name);
 
   constructor() {
-    // Ensure we use direct connection for Prisma (not pooler)
-    // Prisma doesn't work well with pgbouncer transaction pooler
+    // Vercel is IPv4-only, so we need to use Session Pooler (port 6543) instead of Direct Connection (port 5432)
+    // Session Pooler works with Prisma, Transaction Pooler does not
     let databaseUrl = process.env.DATABASE_URL;
     
     if (!databaseUrl) {
+      console.error('❌ DATABASE_URL environment variable is not set!');
+      console.error('   Please configure DATABASE_URL in Vercel Dashboard > Settings > Environment Variables');
       throw new Error('DATABASE_URL environment variable is required');
     }
     
-    // If URL contains pgbouncer=true, remove it and use direct connection
-    if (databaseUrl.includes('pgbouncer=true')) {
-      databaseUrl = databaseUrl
-        .replace(':6543/', ':5432/') // Change port from pooler to direct
-        .replace('?pgbouncer=true&', '?')
-        .replace('&pgbouncer=true', '')
-        .replace('?pgbouncer=true', '');
+    // Log that we have a DATABASE_URL (for debugging in Vercel)
+    console.log('✅ DATABASE_URL is configured');
+    
+    // If running on Vercel (IPv4-only), use Session Pooler
+    // Session Pooler uses hostname aws-1-us-east-2.pooler.supabase.com with port 5432
+    if (process.env.VERCEL) {
+      console.log('🌐 Running on Vercel (IPv4-only) - using Session Pooler');
+      
+      // Check if already using pooler hostname
+      const isUsingPooler = databaseUrl.includes('pooler.supabase.com');
+      
+      if (!isUsingPooler) {
+        // Convert direct connection (db.xxx.supabase.co) to Session Pooler
+        // Replace hostname with pooler hostname
+        databaseUrl = databaseUrl.replace(
+          /@db\.([^.]+)\.supabase\.co:/,
+          '@aws-1-us-east-2.pooler.supabase.com:'
+        );
+        console.log('   Converted to Session Pooler hostname');
+      }
+      
+      // Ensure port is 5432 (Session Pooler uses 5432, not 6543)
+      if (databaseUrl.includes(':6543/')) {
+        databaseUrl = databaseUrl.replace(':6543/', ':5432/');
+        console.log('   Using port 5432 for Session Pooler');
+      }
+      
+      // Ensure pool_mode=session is present (required for Prisma compatibility)
+      if (!databaseUrl.includes('pool_mode=')) {
+        databaseUrl += (databaseUrl.includes('?') ? '&' : '?') + 'pool_mode=session';
+        console.log('   Added pool_mode=session');
+      }
+      
+      console.log('   Using Session Pooler mode (compatible with Prisma and IPv4)');
+    } else {
+      // For local development, use direct connection if not already using pooler
+      // If URL contains pooler hostname, convert to direct connection
+      if (databaseUrl.includes('pooler.supabase.com')) {
+        console.log('🔄 Converting from pooler to direct connection for local development');
+        // Extract project ref from the pooler URL or use the original
+        // For now, we'll keep the pooler URL but this shouldn't happen in local dev
+        console.warn('   ⚠️ Using pooler URL in local development - consider using direct connection');
+      }
     }
     
     // Ensure sslmode=require is present for Supabase
     if (!databaseUrl.includes('sslmode=')) {
       databaseUrl += (databaseUrl.includes('?') ? '&' : '?') + 'sslmode=require';
+      console.log('✅ Added sslmode=require to DATABASE_URL');
     }
     
     // Call super first (required by TypeScript)
@@ -43,8 +82,16 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     try {
       const url = new URL(databaseUrl);
       this.logger.log(`🔌 Prisma will connect to: ${url.hostname}:${url.port || '5432'}`);
+      this.logger.log(`   Database: ${url.pathname.replace('/', '') || 'postgres'}`);
+      this.logger.log(`   SSL Mode: ${url.searchParams.get('sslmode') || 'not set'}`);
+      
+      // Check if running on Vercel
+      if (process.env.VERCEL) {
+        this.logger.log('   Environment: Vercel (serverless, using Session Pooler)');
+      }
     } catch (e) {
       this.logger.error('❌ Invalid DATABASE_URL format');
+      this.logger.error(`   Error: ${(e as Error).message}`);
     }
   }
 
