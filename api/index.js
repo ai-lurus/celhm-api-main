@@ -87,7 +87,24 @@ async function bootstrap() {
       .build();
     
     const document = SwaggerModule.createDocument(app, config);
-    SwaggerModule.setup('docs', app, document);
+    
+    // Configure Swagger with custom options for Vercel
+    // Use CDN for Swagger UI assets to avoid static file serving issues
+    SwaggerModule.setup('docs', app, document, {
+      swaggerOptions: {
+        persistAuthorization: true,
+        displayRequestDuration: true,
+        tryItOutEnabled: true,
+      },
+      customCss: '.swagger-ui .topbar { display: none }',
+      customSiteTitle: 'CELHM API Documentation',
+      customfavIcon: '/favicon.ico',
+      customJs: [
+        'https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.17.14/swagger-ui-bundle.js',
+        'https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.17.14/swagger-ui-standalone-preset.js',
+      ],
+      customCssUrl: 'https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.17.14/swagger-ui.css',
+    });
 
     // Initialize the app (but don't listen - Vercel handles that)
     await app.init();
