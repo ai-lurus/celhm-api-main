@@ -7,22 +7,26 @@ let cachedApp;
 
 async function bootstrap() {
   if (!cachedApp) {
-    console.log('🚀 [BOOTSTRAP] Creating NestJS application...');
-    const app = await NestFactory.create(AppModule);
-    console.log('✅ [BOOTSTRAP] NestJS application created');
+    console.log('🚀 [BOOTSTRAP] Creating NestJS application for Vercel...');
     
-    // Enable CORS
+    // Create NestJS app (it uses Express by default)
+    const app = await NestFactory.create(AppModule, {
+      logger: ['error', 'warn'],
+    });
+    
+    // Enable CORS - Allow all origins in production for now, can be restricted later
     const isProduction = process.env.NODE_ENV === 'production' || process.env.VERCEL === '1';
     const hasExplicitCorsOrigins = process.env.CORS_ORIGINS && process.env.CORS_ORIGINS.trim() !== '';
     
     const allowedOrigins = hasExplicitCorsOrigins
       ? process.env.CORS_ORIGINS.split(',').map(origin => origin.trim())
       : isProduction
-      ? []
+      ? [] // Empty means we'll use pattern matching
       : ['http://localhost:3000', 'http://localhost:3001'];
 
     app.enableCors({
       origin: (origin, callback) => {
+        // Allow requests with no origin (like mobile apps or curl requests)
         if (!origin) {
           return callback(null, true);
         }
@@ -34,11 +38,19 @@ async function bootstrap() {
             callback(new Error(`Not allowed by CORS. Origin: ${origin}`));
           }
         } else {
+          // In production without explicit CORS_ORIGINS, allow vercel.app domains and common origins
           if (isProduction) {
-            if (origin.endsWith('.vercel.app') || origin === 'https://vercel.app') {
+            if (
+              origin.endsWith('.vercel.app') || 
+              origin === 'https://vercel.app' ||
+              origin.includes('localhost') ||
+              origin.includes('127.0.0.1')
+            ) {
               callback(null, true);
             } else {
-              callback(new Error(`Not allowed by CORS. Origin: ${origin}. Only vercel.app domains are allowed.`));
+              // For now, allow all origins in production if no explicit config
+              // TODO: Restrict this based on your frontend URL
+              callback(null, true);
             }
           } else {
             if (allowedOrigins.includes(origin)) {
@@ -77,8 +89,11 @@ async function bootstrap() {
     const document = SwaggerModule.createDocument(app, config);
     SwaggerModule.setup('docs', app, document);
 
+    // Initialize the app (but don't listen - Vercel handles that)
+    await app.init();
+    
     cachedApp = app;
-    console.log('✅ [BOOTSTRAP] Application cached and ready');
+    console.log('✅ [BOOTSTRAP] Application cached and ready for Vercel');
   }
   
   return cachedApp;
@@ -87,13 +102,20 @@ async function bootstrap() {
 module.exports = async (req, res) => {
   try {
     const app = await bootstrap();
-    // Get the Express instance from NestJS
+    // Get the Express instance from NestJS HttpAdapter
     const expressApp = app.getHttpAdapter().getInstance();
-    // Handle the request
+    // Handle the request with Express
     expressApp(req, res);
   } catch (error) {
     console.error('❌ Error in Vercel handler:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error('Stack:', error.stack);
+    if (!res.headersSent) {
+      res.status(500).json({ 
+        error: 'Internal server error',
+        message: error.message,
+        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      });
+    }
   }
 };
 
