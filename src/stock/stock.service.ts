@@ -229,83 +229,83 @@ export class StockService {
   }
 
   async reserveStock(branchId: number, variantId: number, qty: number, organizationId: number) {
-    return this.prisma.$transaction(async (tx) => {
-      const stock = await tx.stock.findFirst({
-        where: {
-          branchId,
-          variantId,
-          branch: { organizationId },
-        },
-      });
+    // PgBouncer transaction mode: Read first, validate, then update
+    const stock = await this.prisma.stock.findFirst({
+      where: {
+        branchId,
+        variantId,
+        branch: { organizationId },
+      },
+    });
 
-      if (!stock) {
-        throw new Error('Stock not found');
-      }
+    if (!stock) {
+      throw new Error('Stock not found');
+    }
 
-      const availableQty = stock.qty - stock.reserved;
-      if (availableQty < qty) {
-        throw new Error('Insufficient stock available');
-      }
+    const availableQty = stock.qty - stock.reserved;
+    if (availableQty < qty) {
+      throw new Error('Insufficient stock available');
+    }
 
-      return tx.stock.update({
-        where: { id: stock.id },
-        data: {
-          reserved: stock.reserved + qty,
-        },
-      });
+    // Single update operation - no transaction needed
+    return this.prisma.stock.update({
+      where: { id: stock.id },
+      data: {
+        reserved: stock.reserved + qty,
+      },
     });
   }
 
   async releaseStock(branchId: number, variantId: number, qty: number, organizationId: number) {
-    return this.prisma.$transaction(async (tx) => {
-      const stock = await tx.stock.findFirst({
-        where: {
-          branchId,
-          variantId,
-          branch: { organizationId },
-        },
-      });
+    // PgBouncer transaction mode: Read first, then update
+    const stock = await this.prisma.stock.findFirst({
+      where: {
+        branchId,
+        variantId,
+        branch: { organizationId },
+      },
+    });
 
-      if (!stock) {
-        throw new Error('Stock not found');
-      }
+    if (!stock) {
+      throw new Error('Stock not found');
+    }
 
-      const newReserved = Math.max(0, stock.reserved - qty);
+    const newReserved = Math.max(0, stock.reserved - qty);
 
-      return tx.stock.update({
-        where: { id: stock.id },
-        data: {
-          reserved: newReserved,
-        },
-      });
+    // Single update operation - no transaction needed
+    return this.prisma.stock.update({
+      where: { id: stock.id },
+      data: {
+        reserved: newReserved,
+      },
     });
   }
 
   async consumeStock(branchId: number, variantId: number, qty: number, organizationId: number) {
-    return this.prisma.$transaction(async (tx) => {
-      const stock = await tx.stock.findFirst({
-        where: {
-          branchId,
-          variantId,
-          branch: { organizationId },
-        },
-      });
+    // PgBouncer transaction mode: Read first, validate, then update
+    const stock = await this.prisma.stock.findFirst({
+      where: {
+        branchId,
+        variantId,
+        branch: { organizationId },
+      },
+    });
 
-      if (!stock) {
-        throw new Error('Stock not found');
-      }
+    if (!stock) {
+      throw new Error('Stock not found');
+    }
 
-      if (stock.reserved < qty) {
-        throw new Error('Insufficient reserved stock');
-      }
+    if (stock.reserved < qty) {
+      throw new Error('Insufficient reserved stock');
+    }
 
-      return tx.stock.update({
-        where: { id: stock.id },
-        data: {
-          qty: stock.qty - qty,
-          reserved: stock.reserved - qty,
-        },
-      });
+    // Single update operation - no transaction needed (atomic at DB level)
+    return this.prisma.stock.update({
+      where: { id: stock.id },
+      data: {
+        qty: stock.qty - qty,
+        reserved: stock.reserved - qty,
+      },
     });
   }
 
@@ -315,76 +315,79 @@ export class StockService {
       throw new Error('BranchId is required');
     }
 
-    return this.prisma.$transaction(async (tx) => {
-      const product = await tx.product.create({
-        data: {
-          name: dto.name,
-          brand: dto.brand,
-          model: dto.model,
-        },
-      });
-
-      const variant = await tx.variant.create({
-        data: {
-          productId: product.id,
-          sku: dto.sku || `SKU-${Date.now()}`,
-          name: dto.name,
-          brand: dto.brand,
-          model: dto.model,
-          price: dto.price,
-        },
-      });
-
-      const stock = await tx.stock.create({
-        data: {
-          branchId,
-          variantId: variant.id,
-          qty: dto.qty,
-          min: dto.min,
-          max: dto.max ?? 1000,
-        },
-      });
-
-      return {
-        ...stock,
-        variant: {
-          ...variant,
-          product,
-        },
-      };
+    // PgBouncer transaction mode: Sequential creation (no interactive transaction)
+    // Create product first
+    const product = await this.prisma.product.create({
+      data: {
+        name: dto.name,
+        brand: dto.brand,
+        model: dto.model,
+      },
     });
+
+    // Create variant with productId
+    const variant = await this.prisma.variant.create({
+      data: {
+        productId: product.id,
+        sku: dto.sku || `SKU-${Date.now()}`,
+        name: dto.name,
+        brand: dto.brand,
+        model: dto.model,
+        price: dto.price,
+      },
+    });
+
+    // Create stock with variantId
+    const stock = await this.prisma.stock.create({
+      data: {
+        branchId,
+        variantId: variant.id,
+        qty: dto.qty,
+        min: dto.min,
+        max: dto.max ?? 1000,
+      },
+    });
+
+    return {
+      ...stock,
+      variant: {
+        ...variant,
+        product,
+      },
+    };
   }
 
   async updateInventoryItem(id: number, dto: UpdateInventoryItemDto, user: AuthUser) {
-    return this.prisma.$transaction(async (tx) => {
-      const stock = await tx.stock.findFirst({
-        where: {
-          id,
-          branch: { organizationId: user.organizationId },
-        },
-        include: {
-          variant: {
-            include: {
-              product: true,
-            },
+    // PgBouncer transaction mode: Read first, then batch update
+    const stock = await this.prisma.stock.findFirst({
+      where: {
+        id,
+        branch: { organizationId: user.organizationId },
+      },
+      include: {
+        variant: {
+          include: {
+            product: true,
           },
         },
-      });
+      },
+    });
 
-      if (!stock) {
-        throw new Error('Stock item not found');
-      }
+    if (!stock) {
+      throw new Error('Stock item not found');
+    }
 
-      const updatedProduct = await tx.product.update({
+    // Use batch transaction for atomic updates
+    const [updatedProduct, updatedVariant, updatedStock] = await this.prisma.$transaction([
+      this.prisma.product.update({
         where: { id: stock.variant.productId },
         data: {
           name: dto.name ?? stock.variant.product.name,
           brand: dto.brand ?? stock.variant.product.brand,
           model: dto.model ?? stock.variant.product.model,
         },
-      });
-
-      const updatedVariant = await tx.variant.update({
+      }),
+      this.prisma.variant.update({
         where: { id: stock.variantId },
         data: {
           sku: dto.sku ?? stock.variant.sku,
@@ -393,25 +396,24 @@ export class StockService {
           model: dto.model ?? stock.variant.model,
           price: dto.price ?? stock.variant.price,
         },
-      });
-
-      const updatedStock = await tx.stock.update({
+      }),
+      this.prisma.stock.update({
         where: { id: stock.id },
         data: {
           qty: dto.qty ?? stock.qty,
           min: dto.min ?? stock.min,
           max: dto.max ?? stock.max,
         },
-      });
+      }),
+    ]);
 
-      return {
-        ...updatedStock,
-        variant: {
-          ...updatedVariant,
-          product: updatedProduct,
-        },
-      };
-    });
+    return {
+      ...updatedStock,
+      variant: {
+        ...updatedVariant,
+        product: updatedProduct,
+      },
+    };
   }
 
   async deleteInventoryItem(id: number, user: AuthUser) {

@@ -34,105 +34,104 @@ export class CashService {
   }
 
   async createCashCut(createCashCutDto: CreateCashCutDto, user: AuthUser) {
-    return this.prisma.$transaction(async (tx) => {
-      // Get date range for the day
-      const date = new Date(createCashCutDto.date);
-      const startOfDay = new Date(date);
-      startOfDay.setHours(0, 0, 0, 0);
-      const endOfDay = new Date(date);
-      endOfDay.setHours(23, 59, 59, 999);
+    // PgBouncer transaction mode: Read data first, then create (no interactive transaction)
+    // Get date range for the day
+    const date = new Date(createCashCutDto.date);
+    const startOfDay = new Date(date);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(date);
+    endOfDay.setHours(23, 59, 59, 999);
 
-      // Get sales for the day
-      const sales = await tx.sale.findMany({
-        where: {
-          branchId: createCashCutDto.branchId,
-          createdAt: {
-            gte: startOfDay,
-            lte: endOfDay,
-          },
-          status: SaleStatus.PAGADO,
+    // Get sales for the day
+    const sales = await this.prisma.sale.findMany({
+      where: {
+        branchId: createCashCutDto.branchId,
+        createdAt: {
+          gte: startOfDay,
+          lte: endOfDay,
         },
-        include: {
-          payments: true,
-        },
-      });
+        status: SaleStatus.PAGADO,
+      },
+      include: {
+        payments: true,
+      },
+    });
 
-      // Calculate totals by payment method
-      let salesCash = 0;
-      let salesCard = 0;
-      let salesTransfer = 0;
-      let advances = 0;
+    // Calculate totals by payment method
+    let salesCash = 0;
+    let salesCard = 0;
+    let salesTransfer = 0;
+    let advances = 0;
 
-      for (const sale of sales) {
-        for (const payment of sale.payments) {
-          const amount = Number(payment.amount);
-          switch (payment.method) {
-            case PaymentMethod.EFECTIVO:
-              salesCash += amount;
-              // If sale is for a ticket, count as advance
-              if (sale.ticketId) {
-                advances += amount;
-              }
-              break;
-            case PaymentMethod.TARJETA:
-              salesCard += amount;
-              break;
-            case PaymentMethod.TRANSFERENCIA:
-              salesTransfer += amount;
-              break;
-          }
+    for (const sale of sales) {
+      for (const payment of sale.payments) {
+        const amount = Number(payment.amount);
+        switch (payment.method) {
+          case PaymentMethod.EFECTIVO:
+            salesCash += amount;
+            // If sale is for a ticket, count as advance
+            if (sale.ticketId) {
+              advances += amount;
+            }
+            break;
+          case PaymentMethod.TARJETA:
+            salesCard += amount;
+            break;
+          case PaymentMethod.TRANSFERENCIA:
+            salesTransfer += amount;
+            break;
         }
       }
+    }
 
-      // Get initial amount from last cut or provided
-      const lastCut = await tx.cashCut.findFirst({
-        where: {
-          cashRegisterId: createCashCutDto.cashRegisterId,
-          date: {
-            lt: date,
+    // Get initial amount from last cut or provided
+    const lastCut = await this.prisma.cashCut.findFirst({
+      where: {
+        cashRegisterId: createCashCutDto.cashRegisterId,
+        date: {
+          lt: date,
+        },
+      },
+      orderBy: { date: 'desc' },
+    });
+
+    const initialAmount = createCashCutDto.initialAmount || (lastCut ? Number(lastCut.finalAmount) : 0);
+    const adjustments = Number(createCashCutDto.adjustments || 0);
+    const totalIncome = salesCash + salesCard + salesTransfer + advances + adjustments;
+    const finalAmount = initialAmount + totalIncome;
+
+    // Create cash cut (single operation - no transaction needed)
+    return this.prisma.cashCut.create({
+      data: {
+        cashRegisterId: createCashCutDto.cashRegisterId,
+        branchId: createCashCutDto.branchId,
+        date,
+        initialAmount,
+        salesCash,
+        salesCard,
+        salesTransfer,
+        advances,
+        adjustments,
+        totalIncome,
+        finalAmount,
+        notes: createCashCutDto.notes,
+        userId: user.id,
+      },
+      include: {
+        user: {
+          select: {
+            name: true,
+            email: true,
           },
         },
-        orderBy: { date: 'desc' },
-      });
-
-      const initialAmount = createCashCutDto.initialAmount || (lastCut ? Number(lastCut.finalAmount) : 0);
-      const adjustments = Number(createCashCutDto.adjustments || 0);
-      const totalIncome = salesCash + salesCard + salesTransfer + advances + adjustments;
-      const finalAmount = initialAmount + totalIncome;
-
-      // Create cash cut
-      return tx.cashCut.create({
-        data: {
-          cashRegisterId: createCashCutDto.cashRegisterId,
-          branchId: createCashCutDto.branchId,
-          date,
-          initialAmount,
-          salesCash,
-          salesCard,
-          salesTransfer,
-          advances,
-          adjustments,
-          totalIncome,
-          finalAmount,
-          notes: createCashCutDto.notes,
-          userId: user.id,
-        },
-        include: {
-          user: {
-            select: {
-              name: true,
-              email: true,
-            },
-          },
-          cashRegister: true,
-          branch: {
-            select: {
-              name: true,
-              code: true,
-            },
+        cashRegister: true,
+        branch: {
+          select: {
+            name: true,
+            code: true,
           },
         },
-      });
+      },
     });
   }
 

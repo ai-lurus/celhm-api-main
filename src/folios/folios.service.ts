@@ -8,49 +8,63 @@ export class FoliosService {
   async next(prefix: string, branchId: number): Promise<string> {
     const currentPeriod = new Date().toISOString().slice(0, 7).replace('-', ''); // YYYYMM
 
-    return this.prisma.$transaction(async (tx) => {
-      // Get branch info for code
-      const branch = await tx.branch.findUnique({
-        where: { id: branchId },
-        select: { code: true },
-      });
+    // PgBouncer transaction mode doesn't support interactive transactions
+    // Using optimistic locking with retry logic instead
+    const maxRetries = 5;
+    let retries = 0;
 
-      if (!branch) {
-        throw new Error('Branch not found');
-      }
+    while (retries < maxRetries) {
+      try {
+        // Get branch info for code
+        const branch = await this.prisma.branch.findUnique({
+          where: { id: branchId },
+          select: { code: true },
+        });
 
-      // Find or create folio sequence
-      const folioSeq = await tx.folioSequence.findUnique({
-        where: {
-          prefix_branchId_period: {
+        if (!branch) {
+          throw new Error('Branch not found');
+        }
+
+        // Find or create folio sequence using upsert (atomic operation)
+        const folioSeq = await this.prisma.folioSequence.upsert({
+          where: {
+            prefix_branchId_period: {
+              prefix,
+              branchId,
+              period: currentPeriod,
+            },
+          },
+          update: {
+            seq: {
+              increment: 1,
+            },
+          },
+          create: {
             prefix,
             branchId,
             period: currentPeriod,
+            seq: 1,
           },
-        },
-      });
+        });
 
-      let newSeq: number;
-      if (folioSeq) {
-        newSeq = folioSeq.seq + 1;
-        await tx.folioSequence.update({
-          where: { id: folioSeq.id },
-          data: { seq: newSeq },
-        });
-      } else {
-        newSeq = 1;
-        await tx.folioSequence.create({
-          data: {
-            prefix,
-            branchId,
-            period: currentPeriod,
-            seq: newSeq,
-          },
-        });
+        const newSeq = folioSeq.seq;
+        return `${prefix}-${branch.code}-${currentPeriod}-${newSeq.toString().padStart(4, '0')}`;
+      } catch (error: any) {
+        // Retry on unique constraint violation or concurrent update
+        if (error.code === 'P2002' || error.code === 'P2034') {
+          retries++;
+          if (retries >= maxRetries) {
+            throw new Error('Failed to generate folio after retries');
+          }
+          // Small delay before retry
+          await new Promise(resolve => setTimeout(resolve, 10 * retries));
+          continue;
+        }
+        throw error;
       }
+    }
 
-      return `${prefix}-${branch.code}-${currentPeriod}-${newSeq.toString().padStart(4, '0')}`;
-    });
+    throw new Error('Failed to generate folio');
   }
 
   async preview(prefix: string, branchId: number): Promise<string> {

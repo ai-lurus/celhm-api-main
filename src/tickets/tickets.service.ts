@@ -16,31 +16,26 @@ export class TicketsService {
   ) {}
 
   async createTicket(createTicketDto: CreateTicketDto, user: AuthUser) {
-    return this.prisma.$transaction(async (tx) => {
-      // Generate folio
-      const folio = await this.foliosService.next('LAB', createTicketDto.branchId);
+    // PgBouncer transaction mode: Generate folio first (handles its own atomicity)
+    const folio = await this.foliosService.next('LAB', createTicketDto.branchId);
 
-      // Create ticket
-      const ticket = await tx.ticket.create({
-        data: {
-          ...createTicketDto,
-          folio,
-          userId: user.id,
+    // Create ticket with nested history creation (atomic at DB level)
+    const ticket = await this.prisma.ticket.create({
+      data: {
+        ...createTicketDto,
+        folio,
+        userId: user.id,
+        history: {
+          create: {
+            toState: TicketState.RECIBIDO,
+            notes: 'Ticket creado',
+            userId: user.id,
+          },
         },
-      });
-
-      // Create initial history
-      await tx.ticketHistory.create({
-        data: {
-          ticketId: ticket.id,
-          toState: TicketState.RECIBIDO,
-          notes: 'Ticket creado',
-          userId: user.id,
-        },
-      });
-
-      return ticket;
+      },
     });
+
+    return ticket;
   }
 
   async getTickets(branchId: number, organizationId: number, filters?: {
@@ -204,65 +199,68 @@ export class TicketsService {
     ip?: string,
     userAgent?: string,
   ) {
-    return this.prisma.$transaction(async (tx) => {
-      const ticket = await tx.ticket.findFirst({
+    // PgBouncer transaction mode: Separate queries instead of interactive transaction
+    // Read ticket first
+    const ticket = await this.prisma.ticket.findFirst({
+      where: {
+        id,
+        branch: { organizationId: user.organizationId },
+      },
+      include: {
+        parts: true,
+      },
+    });
+
+    if (!ticket) {
+      throw new Error('Ticket not found');
+    }
+
+    // Validate state transition
+    this.validateStateTransition(ticket.state, updateTicketStateDto.state, user.role);
+
+    // RF-ORD-08: Validate payment before marking as ENTREGADO
+    if (updateTicketStateDto.state === TicketState.ENTREGADO) {
+      const finalCost = Number(updateTicketStateDto.finalCost || ticket.finalCost || 0);
+      const advancePayment = Number(ticket.advancePayment || 0);
+      
+      // Get total payments from sales
+      const sales = await this.prisma.sale.findMany({
         where: {
-          id,
-          branch: { organizationId: user.organizationId },
+          ticketId: id,
+          status: SaleStatus.PAGADO,
         },
         include: {
-          parts: true,
+          payments: true,
         },
       });
 
-      if (!ticket) {
-        throw new Error('Ticket not found');
+      const totalPaid = sales.reduce((sum, sale) => {
+        return sum + sale.payments.reduce((s, p) => s + Number(p.amount), 0);
+      }, advancePayment);
+
+      if (totalPaid < finalCost) {
+        throw new Error(`Cannot deliver ticket: payment incomplete. Total: ${finalCost}, Paid: ${totalPaid}`);
       }
+    }
 
-      // Validate state transition
-      this.validateStateTransition(ticket.state, updateTicketStateDto.state, user.role);
+    // Prepare updates for batch transaction
+    const updateData = {
+      state: updateTicketStateDto.state,
+      diagnosis: updateTicketStateDto.diagnosis || ticket.diagnosis,
+      solution: updateTicketStateDto.solution || ticket.solution,
+      estimatedCost: updateTicketStateDto.estimatedCost || ticket.estimatedCost,
+      finalCost: updateTicketStateDto.finalCost || ticket.finalCost,
+      advancePayment: updateTicketStateDto.advancePayment !== undefined ? updateTicketStateDto.advancePayment : ticket.advancePayment,
+      internalNotes: updateTicketStateDto.internalNotes || ticket.internalNotes,
+    };
 
-      // RF-ORD-08: Validate payment before marking as ENTREGADO
-      if (updateTicketStateDto.state === TicketState.ENTREGADO) {
-        const finalCost = Number(updateTicketStateDto.finalCost || ticket.finalCost || 0);
-        const advancePayment = Number(ticket.advancePayment || 0);
-        
-        // Get total payments from sales
-        const sales = await tx.sale.findMany({
-          where: {
-            ticketId: id,
-            status: SaleStatus.PAGADO,
-          },
-          include: {
-            payments: true,
-          },
-        });
-
-        const totalPaid = sales.reduce((sum, sale) => {
-          return sum + sale.payments.reduce((s, p) => s + Number(p.amount), 0);
-        }, advancePayment);
-
-        if (totalPaid < finalCost) {
-          throw new Error(`Cannot deliver ticket: payment incomplete. Total: ${finalCost}, Paid: ${totalPaid}`);
-        }
-      }
-
-      // Update ticket
-      const updatedTicket = await tx.ticket.update({
+    // Use batch transaction for ticket update and history creation
+    const [updatedTicket] = await this.prisma.$transaction([
+      this.prisma.ticket.update({
         where: { id },
-        data: {
-          state: updateTicketStateDto.state,
-          diagnosis: updateTicketStateDto.diagnosis || ticket.diagnosis,
-          solution: updateTicketStateDto.solution || ticket.solution,
-          estimatedCost: updateTicketStateDto.estimatedCost || ticket.estimatedCost,
-          finalCost: updateTicketStateDto.finalCost || ticket.finalCost,
-          advancePayment: updateTicketStateDto.advancePayment !== undefined ? updateTicketStateDto.advancePayment : ticket.advancePayment,
-          internalNotes: updateTicketStateDto.internalNotes || ticket.internalNotes,
-        },
-      });
-
-      // Create history entry
-      await tx.ticketHistory.create({
+        data: updateData,
+      }),
+      this.prisma.ticketHistory.create({
         data: {
           ticketId: id,
           fromState: ticket.state,
@@ -272,36 +270,35 @@ export class TicketsService {
           ip,
           userAgent,
         },
-      });
+      }),
+    ]);
 
-      // Handle state-specific logic
-      if (updateTicketStateDto.state === TicketState.EN_REPARACION) {
-        // Consume reserved parts
-        await this.consumeReservedParts(tx, ticket.parts, user, ip, userAgent);
-      } else if (updateTicketStateDto.state === TicketState.CANCELADO) {
-        // Release reserved parts
-        await this.releaseReservedParts(tx, ticket.parts);
-      }
+    // Handle state-specific logic (outside transaction - these are idempotent operations)
+    if (updateTicketStateDto.state === TicketState.EN_REPARACION) {
+      await this.consumeReservedPartsWithoutTx(ticket.parts, user, ip, userAgent);
+    } else if (updateTicketStateDto.state === TicketState.CANCELADO) {
+      await this.releaseReservedPartsWithoutTx(ticket.parts);
+    }
 
-      return updatedTicket;
-    });
+    return updatedTicket;
   }
 
   async addTicketPart(id: number, addTicketPartDto: AddTicketPartDto, user: AuthUser) {
-    return this.prisma.$transaction(async (tx) => {
-      const ticket = await tx.ticket.findFirst({
-        where: {
-          id,
-          branch: { organizationId: user.organizationId },
-        },
-      });
+    // PgBouncer transaction mode: Read first, then batch transaction
+    const ticket = await this.prisma.ticket.findFirst({
+      where: {
+        id,
+        branch: { organizationId: user.organizationId },
+      },
+    });
 
-      if (!ticket) {
-        throw new Error('Ticket not found');
-      }
+    if (!ticket) {
+      throw new Error('Ticket not found');
+    }
 
-      // Reserve stock
-      await tx.stock.updateMany({
+    // Use batch transaction for atomic stock reservation and part creation
+    const [, ticketPart] = await this.prisma.$transaction([
+      this.prisma.stock.updateMany({
         where: {
           branchId: ticket.branchId,
           variantId: addTicketPartDto.variantId,
@@ -311,18 +308,18 @@ export class TicketsService {
             increment: addTicketPartDto.qty,
           },
         },
-      });
-
-      // Add ticket part
-      return tx.ticketPart.create({
+      }),
+      this.prisma.ticketPart.create({
         data: {
           ticketId: id,
           variantId: addTicketPartDto.variantId,
           qty: addTicketPartDto.qty,
           state: TicketPartState.RESERVADA,
         },
-      });
-    });
+      }),
+    ]);
+
+    return ticketPart;
   }
 
   private validateStateTransition(fromState: TicketState, toState: TicketState, userRole: string) {
@@ -341,64 +338,92 @@ export class TicketsService {
     }
   }
 
-  private async consumeReservedParts(tx: any, parts: any[], user: AuthUser, ip?: string, userAgent?: string) {
+  // PgBouncer compatible: No transaction context needed
+  private async consumeReservedPartsWithoutTx(parts: any[], user: AuthUser, ip?: string, userAgent?: string) {
+    if (parts.length === 0) return;
+
+    // Get ticket info for movements (parts include ticketId but not full ticket)
+    const ticketIds = [...new Set(parts.map(p => p.ticketId))];
+    const tickets = await this.prisma.ticket.findMany({
+      where: { id: { in: ticketIds } },
+      select: { id: true, folio: true, branchId: true },
+    });
+    const ticketMap = new Map(tickets.map(t => [t.id, t]));
+
+    // Process each part with batch transaction
     for (const part of parts) {
       if (part.state === TicketPartState.RESERVADA) {
-        // Create EGR movement
-        await tx.movement.create({
-          data: {
-            branchId: part.ticket.branchId,
-            variantId: part.variantId,
-            type: MovementType.EGR,
-            qty: part.qty,
-            reason: `Consumo por ticket ${part.ticket.folio}`,
-            ticketId: part.ticketId,
-            userId: user.id,
-            ip,
-            userAgent,
-          },
-        });
+        const ticket = ticketMap.get(part.ticketId);
+        if (!ticket) continue;
 
-        // Update stock
-        await tx.stock.updateMany({
-          where: {
-            branchId: part.ticket.branchId,
-            variantId: part.variantId,
-          },
-          data: {
-            qty: { decrement: part.qty },
-            reserved: { decrement: part.qty },
-          },
-        });
-
-        // Update part state
-        await tx.ticketPart.update({
-          where: { id: part.id },
-          data: { state: TicketPartState.CONSUMIDA },
-        });
+        // Use batch transaction for atomic part consumption
+        await this.prisma.$transaction([
+          this.prisma.movement.create({
+            data: {
+              branchId: ticket.branchId,
+              variantId: part.variantId,
+              type: MovementType.EGR,
+              qty: part.qty,
+              reason: `Consumo por ticket ${ticket.folio}`,
+              ticketId: part.ticketId,
+              userId: user.id,
+              ip,
+              userAgent,
+            },
+          }),
+          this.prisma.stock.updateMany({
+            where: {
+              branchId: ticket.branchId,
+              variantId: part.variantId,
+            },
+            data: {
+              qty: { decrement: part.qty },
+              reserved: { decrement: part.qty },
+            },
+          }),
+          this.prisma.ticketPart.update({
+            where: { id: part.id },
+            data: { state: TicketPartState.CONSUMIDA },
+          }),
+        ]);
       }
     }
   }
 
-  private async releaseReservedParts(tx: any, parts: any[]) {
+  // PgBouncer compatible: No transaction context needed
+  private async releaseReservedPartsWithoutTx(parts: any[]) {
+    if (parts.length === 0) return;
+
+    // Get ticket info for branchId
+    const ticketIds = [...new Set(parts.map(p => p.ticketId))];
+    const tickets = await this.prisma.ticket.findMany({
+      where: { id: { in: ticketIds } },
+      select: { id: true, branchId: true },
+    });
+    const ticketMap = new Map(tickets.map(t => [t.id, t]));
+
+    // Process each part with batch transaction
     for (const part of parts) {
       if (part.state === TicketPartState.RESERVADA) {
-        // Release stock
-        await tx.stock.updateMany({
-          where: {
-            branchId: part.ticket.branchId,
-            variantId: part.variantId,
-          },
-          data: {
-            reserved: { decrement: part.qty },
-          },
-        });
+        const ticket = ticketMap.get(part.ticketId);
+        if (!ticket) continue;
 
-        // Update part state
-        await tx.ticketPart.update({
-          where: { id: part.id },
-          data: { state: TicketPartState.LIBERADA },
-        });
+        // Use batch transaction for atomic part release
+        await this.prisma.$transaction([
+          this.prisma.stock.updateMany({
+            where: {
+              branchId: ticket.branchId,
+              variantId: part.variantId,
+            },
+            data: {
+              reserved: { decrement: part.qty },
+            },
+          }),
+          this.prisma.ticketPart.update({
+            where: { id: part.id },
+            data: { state: TicketPartState.LIBERADA },
+          }),
+        ]);
       }
     }
   }

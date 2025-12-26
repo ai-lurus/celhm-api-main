@@ -13,29 +13,30 @@ export class MovementsService {
   ) {}
 
   async createMovement(createMovementDto: CreateMovementDto, user: AuthUser, ip?: string, userAgent?: string) {
-    return this.prisma.$transaction(async (tx) => {
-      // Generate folio if not provided
-      let folio = createMovementDto.folio;
-      if (!folio) {
-        const prefix = this.getPrefixForMovementType(createMovementDto.type);
-        folio = await this.foliosService.next(prefix, createMovementDto.branchId);
-      }
+    // PgBouncer transaction mode: Generate folio first, then batch transaction
+    let folio = createMovementDto.folio;
+    if (!folio) {
+      const prefix = this.getPrefixForMovementType(createMovementDto.type);
+      folio = await this.foliosService.next(prefix, createMovementDto.branchId);
+    }
 
-      // Create movement
-      const movement = await tx.movement.create({
-        data: {
-          ...createMovementDto,
-          folio,
-          userId: user.id,
-          ip,
-          userAgent,
-        },
-      });
+    // Prepare movement creation
+    const movementData = {
+      ...createMovementDto,
+      folio,
+      userId: user.id,
+      ip,
+      userAgent,
+    };
 
-      // Update stock based on movement type
-      if (createMovementDto.type === MovementType.ING) {
-        // Increase stock
-        await tx.stock.upsert({
+    // Use batch transaction for movement and stock update
+    if (createMovementDto.type === MovementType.ING) {
+      // Increase stock - use batch transaction
+      const [movement] = await this.prisma.$transaction([
+        this.prisma.movement.create({
+          data: movementData,
+        }),
+        this.prisma.stock.upsert({
           where: {
             branchId_variantId: {
               branchId: createMovementDto.branchId,
@@ -55,30 +56,41 @@ export class MovementsService {
             max: 1000,
             reserved: 0,
           },
-        });
-      } else if (createMovementDto.type === MovementType.EGR || createMovementDto.type === MovementType.VTA) {
-        // Decrease stock
-        const stock = await tx.stock.findFirst({
-          where: {
-            branchId: createMovementDto.branchId,
-            variantId: createMovementDto.variantId,
-          },
-        });
+        }),
+      ]);
+      return movement;
+    } else if (createMovementDto.type === MovementType.EGR || createMovementDto.type === MovementType.VTA) {
+      // Decrease stock - read first to validate
+      const stock = await this.prisma.stock.findFirst({
+        where: {
+          branchId: createMovementDto.branchId,
+          variantId: createMovementDto.variantId,
+        },
+      });
 
-        if (!stock || stock.qty < createMovementDto.qty) {
-          throw new Error('Insufficient stock');
-        }
+      if (!stock || stock.qty < createMovementDto.qty) {
+        throw new Error('Insufficient stock');
+      }
 
-        await tx.stock.update({
+      // Use batch transaction for movement and stock update
+      const [movement] = await this.prisma.$transaction([
+        this.prisma.movement.create({
+          data: movementData,
+        }),
+        this.prisma.stock.update({
           where: { id: stock.id },
           data: {
             qty: stock.qty - createMovementDto.qty,
           },
-        });
-      }
-
+        }),
+      ]);
       return movement;
-    });
+    } else {
+      // Other movement types - just create movement
+      return this.prisma.movement.create({
+        data: movementData,
+      });
+    }
   }
 
   async getMovements(

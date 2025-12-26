@@ -13,82 +13,84 @@ export class SalesService {
   ) {}
 
   async create(createSaleDto: CreateSaleDto, user: AuthUser) {
-    return this.prisma.$transaction(async (tx) => {
-      // Generate folio
-      const folio = await this.foliosService.next('VTA', createSaleDto.branchId);
+    // PgBouncer transaction mode: Sequential operations instead of interactive transaction
+    // Generate folio first (handles its own atomicity)
+    const folio = await this.foliosService.next('VTA', createSaleDto.branchId);
 
-      // Calculate totals
-      const subtotal = createSaleDto.lines.reduce(
-        (sum, line) => sum + (Number(line.unitPrice) * line.qty - Number(line.discount || 0)),
-        0,
-      );
-      const discount = Number(createSaleDto.discount || 0);
-      const total = subtotal - discount;
+    // Calculate totals
+    const subtotal = createSaleDto.lines.reduce(
+      (sum, line) => sum + (Number(line.unitPrice) * line.qty - Number(line.discount || 0)),
+      0,
+    );
+    const discount = Number(createSaleDto.discount || 0);
+    const total = subtotal - discount;
 
-      // Create sale
-      const sale = await tx.sale.create({
-        data: {
-          branchId: createSaleDto.branchId,
-          folio,
-          customerId: createSaleDto.customerId,
-          ticketId: createSaleDto.ticketId,
-          status: SaleStatus.PENDIENTE,
-          subtotal,
-          discount,
-          total,
-          userId: user.id,
-          lines: {
-            create: createSaleDto.lines.map((line) => ({
-              variantId: line.variantId,
-              description: line.description,
-              qty: line.qty,
-              unitPrice: line.unitPrice,
-              discount: line.discount || 0,
-              total: Number(line.unitPrice) * line.qty - Number(line.discount || 0),
-            })),
-          },
+    // Create sale with nested lines (atomic at DB level)
+    const sale = await this.prisma.sale.create({
+      data: {
+        branchId: createSaleDto.branchId,
+        folio,
+        customerId: createSaleDto.customerId,
+        ticketId: createSaleDto.ticketId,
+        status: SaleStatus.PENDIENTE,
+        subtotal,
+        discount,
+        total,
+        userId: user.id,
+        lines: {
+          create: createSaleDto.lines.map((line) => ({
+            variantId: line.variantId,
+            description: line.description,
+            qty: line.qty,
+            unitPrice: line.unitPrice,
+            discount: line.discount || 0,
+            total: Number(line.unitPrice) * line.qty - Number(line.discount || 0),
+          })),
         },
-        include: {
-          lines: {
-            include: {
-              variant: {
-                include: {
-                  product: true,
-                },
+      },
+      include: {
+        lines: {
+          include: {
+            variant: {
+              include: {
+                product: true,
               },
             },
           },
-          customer: true,
-          ticket: true,
         },
+        customer: true,
+        ticket: true,
+      },
+    });
+
+    // If payment is provided, process it
+    if (createSaleDto.payment) {
+      await this.processPayment(sale.id, createSaleDto.payment, user, null);
+      
+      // Update sale status
+      await this.prisma.sale.update({
+        where: { id: sale.id },
+        data: { status: SaleStatus.PAGADO },
       });
 
-      // If payment is provided, process it
-      if (createSaleDto.payment) {
-        await this.processPayment(sale.id, createSaleDto.payment, user, tx);
-        
-        // Update sale status
-        await tx.sale.update({
-          where: { id: sale.id },
-          data: { status: SaleStatus.PAGADO },
-        });
-
-        // If sale is for a ticket, update ticket advance payment
-        if (createSaleDto.ticketId && createSaleDto.payment.method === PaymentMethod.EFECTIVO) {
-          await tx.ticket.update({
-            where: { id: createSaleDto.ticketId },
-            data: {
-              advancePayment: {
-                increment: createSaleDto.payment.amount,
-              },
+      // If sale is for a ticket, update ticket advance payment
+      if (createSaleDto.ticketId && createSaleDto.payment.method === PaymentMethod.EFECTIVO) {
+        await this.prisma.ticket.update({
+          where: { id: createSaleDto.ticketId },
+          data: {
+            advancePayment: {
+              increment: createSaleDto.payment.amount,
             },
-          });
-        }
+          },
+        });
+      }
 
-        // If variant is provided, create stock movement (VTA)
-        for (const line of createSaleDto.lines) {
-          if (line.variantId) {
-            await tx.movement.create({
+      // If variant is provided, create stock movements and update stock
+      for (const line of createSaleDto.lines) {
+        if (line.variantId) {
+          // Use batch transaction for movement and stock update
+          await this.prisma.$transaction([
+            this.prisma.movement.create({
               data: {
                 branchId: createSaleDto.branchId,
                 variantId: line.variantId,
@@ -98,10 +100,8 @@ export class SalesService {
                 folio,
                 userId: user.id,
               },
-            });
-
-            // Update stock
-            await tx.stock.updateMany({
+            }),
+            this.prisma.stock.updateMany({
               where: {
                 branchId: createSaleDto.branchId,
                 variantId: line.variantId,
@@ -109,13 +109,13 @@ export class SalesService {
               data: {
                 qty: { decrement: line.qty },
               },
-            });
-          }
+            }),
+          ]);
         }
       }
+    }
 
-      return this.findOne(sale.id, user.organizationId);
-    });
+    return this.findOne(sale.id, user.organizationId);
   }
 
   async findAll(organizationId: number, filters?: {
@@ -254,29 +254,34 @@ export class SalesService {
   }
 
   async addPayment(saleId: number, paymentDto: { amount: number; method: PaymentMethod; reference?: string }, user: AuthUser) {
-    return this.prisma.$transaction(async (tx) => {
-      const sale = await tx.sale.findFirst({
-        where: {
-          id: saleId,
-          branch: { organizationId: user.organizationId },
-        },
-        include: {
-          payments: true,
-        },
-      });
+    // PgBouncer transaction mode: Read first, validate, then batch transaction
+    const sale = await this.prisma.sale.findFirst({
+      where: {
+        id: saleId,
+        branch: { organizationId: user.organizationId },
+      },
+      include: {
+        payments: true,
+      },
+    });
 
-      if (!sale) {
-        throw new Error('Sale not found');
-      }
+    if (!sale) {
+      throw new Error('Sale not found');
+    }
 
-      const totalPaid = sale.payments.reduce((sum, p) => sum + Number(p.amount), 0);
-      const remaining = Number(sale.total) - totalPaid;
+    const totalPaid = sale.payments.reduce((sum, p) => sum + Number(p.amount), 0);
+    const remaining = Number(sale.total) - totalPaid;
 
-      if (paymentDto.amount > remaining) {
-        throw new Error('Payment amount exceeds remaining balance');
-      }
+    if (paymentDto.amount > remaining) {
+      throw new Error('Payment amount exceeds remaining balance');
+    }
 
-      const payment = await tx.payment.create({
+    const newTotalPaid = totalPaid + Number(paymentDto.amount);
+    const newStatus = newTotalPaid >= Number(sale.total) ? SaleStatus.PAGADO : SaleStatus.PENDIENTE;
+
+    // Use batch transaction for atomic payment creation and sale status update
+    const [payment] = await this.prisma.$transaction([
+      this.prisma.payment.create({
         data: {
           saleId,
           amount: paymentDto.amount,
@@ -284,22 +289,19 @@ export class SalesService {
           reference: paymentDto.reference,
           userId: user.id,
         },
-      });
-
-      const newTotalPaid = totalPaid + Number(paymentDto.amount);
-      const newStatus = newTotalPaid >= Number(sale.total) ? SaleStatus.PAGADO : SaleStatus.PENDIENTE;
-
-      await tx.sale.update({
+      }),
+      this.prisma.sale.update({
         where: { id: saleId },
         data: { status: newStatus },
-      });
+      }),
+    ]);
 
-      return payment;
-    });
+    return payment;
   }
 
+  // PgBouncer compatible: No transaction context needed
   private async processPayment(saleId: number, payment: { amount: number; method: PaymentMethod; reference?: string }, user: AuthUser, tx: any) {
-    return tx.payment.create({
+    return this.prisma.payment.create({
       data: {
         saleId,
         amount: payment.amount,
