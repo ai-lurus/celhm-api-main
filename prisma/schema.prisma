@@ -10,8 +10,9 @@ datasource db {
   provider = "postgresql"
   // DATABASE_URL: Use pooler URL (transaction mode) for runtime
   // DIRECT_URL: Use direct connection for migrations (required by Prisma migrations)
-  // If DIRECT_URL is not set, falls back to DATABASE_URL
-  url      = env("DIRECT_URL") ?? env("DATABASE_URL")
+  // For Vercel deployments, use DATABASE_URL. For local development with migrations,
+  // set DIRECT_URL in .env file. The application code handles the fallback logic.
+  url      = env("DATABASE_URL")
   shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
 }
 

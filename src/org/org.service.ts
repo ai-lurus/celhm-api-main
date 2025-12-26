@@ -47,5 +47,29 @@ export class OrgService {
       orderBy: { user: { name: 'asc' } },
     });
   }
+
+  async updateOrganization(user: AuthUser, data: {
+    name?: string;
+    logo?: string;
+    address?: string;
+    phone?: string;
+    email?: string;
+    taxId?: string;
+    website?: string;
+    currency?: string;
+    timezone?: string;
+  }) {
+    // For now, only update name as other fields don't exist in schema yet
+    // TODO: Add migration to add these fields to Organization model
+    const updateData: any = {};
+    if (data.name) {
+      updateData.name = data.name;
+    }
+    
+    return this.prisma.organization.update({
+      where: { id: user.organizationId },
+      data: updateData,
+    });
+  }
 }
 

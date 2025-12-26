@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import { Controller, Get, Patch, Body, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -17,6 +17,26 @@ export class OrgController {
   @ApiResponse({ status: 200, description: 'Current organization data' })
   async getCurrentOrganization(@CurrentUser() user: AuthUser) {
     return this.orgService.getCurrentOrganization(user);
+  }
+
+  @Patch('me')
+  @ApiOperation({ summary: 'Update current organization' })
+  @ApiResponse({ status: 200, description: 'Organization updated successfully' })
+  async updateOrganization(
+    @CurrentUser() user: AuthUser,
+    @Body() data: {
+      name?: string;
+      logo?: string;
+      address?: string;
+      phone?: string;
+      email?: string;
+      taxId?: string;
+      website?: string;
+      currency?: string;
+      timezone?: string;
+    },
+  ) {
+    return this.orgService.updateOrganization(user, data);
   }
 
   @Get('members')
