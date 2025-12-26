@@ -2,6 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
+import { isLocalNetworkOrigin } from './common/utils/cors.utils';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -72,8 +73,11 @@ async function bootstrap() {
             callback(new Error(`Not allowed by CORS. Origin: ${origin}. Only vercel.app domains are allowed.`));
           }
         } else {
-          // Development: use exact matching
-          if (allowedOrigins.includes(origin)) {
+          // Development: allow localhost, local network IPs, or exact matches
+          if (
+            allowedOrigins.includes(origin) ||
+            isLocalNetworkOrigin(origin)
+          ) {
             if (!isProduction) {
               console.log(`✅ CORS: Allowing origin: ${origin}`);
             }
@@ -81,7 +85,7 @@ async function bootstrap() {
           } else {
             if (!isProduction) {
               console.log(`❌ CORS: Blocking origin: ${origin}`);
-              console.log(`   Allowed origins: ${allowedOrigins.join(', ')}`);
+              console.log(`   Allowed origins: ${allowedOrigins.join(', ')}, or any local network IP`);
             }
             callback(new Error(`Not allowed by CORS. Origin: ${origin}`));
           }

@@ -4,70 +4,124 @@ import { PrismaClient } from '@prisma/client';
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(PrismaService.name);
+  private readonly databaseUrl: string;
 
   constructor() {
-    // Vercel is IPv4-only, so we need to use Session Pooler (port 6543) instead of Direct Connection (port 5432)
-    // Session Pooler works with Prisma, Transaction Pooler does not
+    // Process DATABASE_URL before calling super()
     let databaseUrl = process.env.DATABASE_URL;
     
     if (!databaseUrl) {
       console.error('❌ DATABASE_URL environment variable is not set!');
-      console.error('   Please configure DATABASE_URL in Vercel Dashboard > Settings > Environment Variables');
+      console.error('   Please configure DATABASE_URL in your environment variables');
       throw new Error('DATABASE_URL environment variable is required');
     }
     
-    // Log that we have a DATABASE_URL (for debugging in Vercel)
+    // Log that we have a DATABASE_URL (for debugging)
     console.log('✅ DATABASE_URL is configured');
     
-    // If running on Vercel (IPv4-only), use Session Pooler
-    // Session Pooler uses hostname aws-1-us-east-2.pooler.supabase.com with port 5432
-    if (process.env.VERCEL) {
-      console.log('🌐 Running on Vercel (IPv4-only) - using Session Pooler');
+    // Determine if we're in production
+    const isProduction = process.env.NODE_ENV === 'production' || process.env.VERCEL === '1';
+    
+    if (isProduction) {
+      // Production: Use Transaction Pooler (port 6543 with pgbouncer=true)
+      console.log('🌐 Running in production - using Transaction Pooler');
       
-      // Check if already using pooler hostname
-      const isUsingPooler = databaseUrl.includes('pooler.supabase.com');
-      
-      if (!isUsingPooler) {
-        // Convert direct connection (db.xxx.supabase.co) to Session Pooler
-        // Replace hostname with pooler hostname
-        databaseUrl = databaseUrl.replace(
-          /@db\.([^.]+)\.supabase\.co:/,
-          '@aws-1-us-east-2.pooler.supabase.com:'
-        );
-        console.log('   Converted to Session Pooler hostname');
+      try {
+        const url = new URL(databaseUrl);
+        
+        // Convert direct connection to transaction pooler
+        if (url.hostname.includes('db.') && url.hostname.includes('.supabase.co')) {
+          // Extract project ref from direct connection hostname
+          const projectRef = url.hostname.match(/db\.([^.]+)\.supabase\.co/)?.[1];
+          if (projectRef) {
+            // Convert to pooler hostname (adjust region if needed)
+            url.hostname = `aws-1-us-east-2.pooler.supabase.com`;
+            console.log(`   Converted direct connection to pooler hostname`);
+          }
+        } else if (!url.hostname.includes('pooler.supabase.com')) {
+          // If not already using pooler, assume we need to use pooler
+          // Keep the hostname but we'll ensure port 6543
+          console.log('   Using existing hostname with pooler');
+        }
+        
+        // Ensure port is 6543 for transaction pooler
+        if (url.port !== '6543') {
+          url.port = '6543';
+          console.log('   Using port 6543 for Transaction Pooler');
+        }
+        
+        // Ensure pgbouncer=true is present (required for transaction pooler)
+        url.searchParams.set('pgbouncer', 'true');
+        console.log('   Added pgbouncer=true for Transaction Pooler');
+        
+        // Remove pool_mode if present (transaction pooler doesn't use it)
+        url.searchParams.delete('pool_mode');
+        
+        databaseUrl = url.toString();
+        console.log('   Using Transaction Pooler mode (port 6543)');
+      } catch (e) {
+        console.warn('   ⚠️ Could not parse DATABASE_URL, using as-is');
       }
-      
-      // Ensure port is 5432 (Session Pooler uses 5432, not 6543)
-      if (databaseUrl.includes(':6543/')) {
-        databaseUrl = databaseUrl.replace(':6543/', ':5432/');
-        console.log('   Using port 5432 for Session Pooler');
-      }
-      
-      // Ensure pool_mode=session is present (required for Prisma compatibility)
-      if (!databaseUrl.includes('pool_mode=')) {
-        databaseUrl += (databaseUrl.includes('?') ? '&' : '?') + 'pool_mode=session';
-        console.log('   Added pool_mode=session');
-      }
-      
-      console.log('   Using Session Pooler mode (compatible with Prisma and IPv4)');
     } else {
-      // For local development, use direct connection if not already using pooler
-      // If URL contains pooler hostname, convert to direct connection
-      if (databaseUrl.includes('pooler.supabase.com')) {
-        console.log('🔄 Converting from pooler to direct connection for local development');
-        // Extract project ref from the pooler URL or use the original
-        // For now, we'll keep the pooler URL but this shouldn't happen in local dev
-        console.warn('   ⚠️ Using pooler URL in local development - consider using direct connection');
+      // Local development: Use Direct Connection (port 5432, no pooler)
+      console.log('💻 Running in local development - using Direct Connection');
+      
+      try {
+        const url = new URL(databaseUrl);
+        
+        // Convert pooler connection to direct connection
+        if (url.hostname.includes('pooler.supabase.com')) {
+          // Try to extract project ref from the URL or use a pattern
+          // For Supabase, direct connection format is: db.{project-ref}.supabase.co
+          // We'll need to extract this from the pooler URL or use environment variable
+          const projectRef = process.env.SUPABASE_PROJECT_REF;
+          
+          if (projectRef) {
+            url.hostname = `db.${projectRef}.supabase.co`;
+            console.log(`   Converted pooler to direct connection using project ref: ${projectRef}`);
+          } else {
+            // If we can't determine project ref, try to infer from pooler hostname
+            // Most Supabase projects use aws-1-us-east-2, but the project ref is different
+            console.warn('   ⚠️ SUPABASE_PROJECT_REF not set - cannot convert pooler to direct connection');
+            console.warn('   Please set SUPABASE_PROJECT_REF in .env or use direct connection URL in DATABASE_URL');
+            console.warn('   Using pooler URL for local dev (not recommended)');
+          }
+        }
+        
+        // Ensure port is 5432 for direct connection
+        if (url.port && url.port !== '5432') {
+          url.port = '5432';
+          console.log('   Using port 5432 for Direct Connection');
+        }
+        
+        // Remove pooler-specific parameters
+        url.searchParams.delete('pgbouncer');
+        url.searchParams.delete('pool_mode');
+        
+        databaseUrl = url.toString();
+        console.log('   Using Direct Connection mode (port 5432, no pooler)');
+      } catch (e) {
+        console.warn('   ⚠️ Could not parse DATABASE_URL, using as-is');
       }
     }
     
     // Ensure sslmode=require is present for Supabase
-    if (!databaseUrl.includes('sslmode=')) {
-      databaseUrl += (databaseUrl.includes('?') ? '&' : '?') + 'sslmode=require';
-      console.log('✅ Added sslmode=require to DATABASE_URL');
+    try {
+      const url = new URL(databaseUrl);
+      if (!url.searchParams.has('sslmode')) {
+        url.searchParams.set('sslmode', 'require');
+        databaseUrl = url.toString();
+        console.log('✅ Added sslmode=require to DATABASE_URL');
+      }
+    } catch (e) {
+      // If URL parsing fails, try string manipulation
+      if (!databaseUrl.includes('sslmode=')) {
+        databaseUrl += (databaseUrl.includes('?') ? '&' : '?') + 'sslmode=require';
+        console.log('✅ Added sslmode=require to DATABASE_URL');
+      }
     }
     
-    // Call super first (required by TypeScript)
+    // Call super() first (required by TypeScript when class has initialized properties)
     super({
       log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
       datasources: {
@@ -77,17 +131,25 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
       },
     });
     
+    // Now assign to property after super() call
+    this.databaseUrl = databaseUrl;
+    
     // Now we can use this.logger
     // Log connection details (without password)
     try {
       const url = new URL(databaseUrl);
+      const isProduction = process.env.NODE_ENV === 'production' || process.env.VERCEL === '1';
+      const connectionType = isProduction ? 'Transaction Pooler' : 'Direct Connection';
+      
       this.logger.log(`🔌 Prisma will connect to: ${url.hostname}:${url.port || '5432'}`);
       this.logger.log(`   Database: ${url.pathname.replace('/', '') || 'postgres'}`);
+      this.logger.log(`   Connection Type: ${connectionType}`);
       this.logger.log(`   SSL Mode: ${url.searchParams.get('sslmode') || 'not set'}`);
       
-      // Check if running on Vercel
-      if (process.env.VERCEL) {
-        this.logger.log('   Environment: Vercel (serverless, using Session Pooler)');
+      if (isProduction) {
+        this.logger.log('   Environment: Production (using Transaction Pooler on port 6543)');
+      } else {
+        this.logger.log('   Environment: Local Development (using Direct Connection on port 5432)');
       }
     } catch (e) {
       this.logger.error('❌ Invalid DATABASE_URL format');
@@ -106,9 +168,12 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
       }
 
       // Log connection info (without sensitive data)
-      const dbUrl = process.env.DATABASE_URL;
-      const urlObj = new URL(dbUrl);
+      const urlObj = new URL(this.databaseUrl);
+      const isProduction = process.env.NODE_ENV === 'production' || process.env.VERCEL === '1';
+      const connectionType = isProduction ? 'Transaction Pooler' : 'Direct Connection';
+      
       this.logger.log(`🔌 Connecting to database: ${urlObj.hostname}:${urlObj.port || '5432'}`);
+      this.logger.log(`   Connection Type: ${connectionType}`);
       
       // In serverless environments (Vercel), we use lazy connection
       // The connection will be established on first query
@@ -130,15 +195,17 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
         // Don't throw - Prisma will retry on first query
       }
     } catch (error: any) {
-      const dbUrl = process.env.DATABASE_URL;
-      const urlInfo = dbUrl ? (() => {
+      const urlInfo = this.databaseUrl ? (() => {
         try {
-          const url = new URL(dbUrl);
+          const url = new URL(this.databaseUrl);
           return `${url.hostname}:${url.port || '5432'}`;
         } catch {
           return 'invalid URL format';
         }
       })() : 'not configured';
+      
+      const isProduction = process.env.NODE_ENV === 'production' || process.env.VERCEL === '1';
+      const expectedPort = isProduction ? '6543 (Transaction Pooler)' : '5432 (Direct Connection)';
       
       this.logger.error('❌ Failed to connect to database');
       this.logger.error(`   Host: ${urlInfo}`);
@@ -147,7 +214,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
       if (error.code === 'ECONNREFUSED') {
         this.logger.error('   💡 The database server is not reachable. Check:');
         this.logger.error('      - Is the database server running?');
-        this.logger.error('      - Is the hostname and port correct?');
+        this.logger.error(`      - Is the port correct? (Expected: ${expectedPort})`);
         this.logger.error('      - Are there firewall/network restrictions?');
       } else if (error.code === 'ENOTFOUND') {
         this.logger.error('   💡 DNS resolution failed. Check:');
@@ -159,9 +226,15 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
         this.logger.error('      - Is the user allowed to connect from this IP?');
       } else if (error.message?.includes('Can\'t reach database server')) {
         this.logger.error('   💡 Cannot reach database server. Check:');
-        this.logger.error('      - Is the hostname correct? (db.xxx.supabase.co)');
-        this.logger.error('      - Is the port correct? (5432 for direct connection)');
-        this.logger.error('      - Are you using Direct connection in Supabase?');
+        if (isProduction) {
+          this.logger.error('      - Is the hostname correct? (pooler.supabase.com)');
+          this.logger.error('      - Is the port correct? (6543 for Transaction Pooler)');
+          this.logger.error('      - Is pgbouncer=true in the connection string?');
+        } else {
+          this.logger.error('      - Is the hostname correct? (db.xxx.supabase.co)');
+          this.logger.error('      - Is the port correct? (5432 for Direct Connection)');
+          this.logger.error('      - Are you using Direct connection in Supabase?');
+        }
         this.logger.error('      - Check Supabase Dashboard > Settings > Database > Connection string');
       }
       

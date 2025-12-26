@@ -40,6 +40,40 @@ async function bootstrap() {
       : isProduction
       ? [] // Empty means we'll use pattern matching
       : ['http://localhost:3000', 'http://localhost:3001'];
+    
+    // Import helper function from compiled utils
+    let isLocalNetworkOrigin;
+    try {
+      const corsUtils = require('../dist/src/common/utils/cors.utils');
+      isLocalNetworkOrigin = corsUtils.isLocalNetworkOrigin;
+    } catch (e) {
+      // Fallback if compiled code is not available
+      isLocalNetworkOrigin = (origin) => {
+        try {
+          const url = new URL(origin);
+          const hostname = url.hostname;
+          
+          // Allow localhost and 127.0.0.1
+          if (hostname === 'localhost' || hostname === '127.0.0.1') {
+            return true;
+          }
+          
+          // Allow private network IP ranges
+          // 192.168.0.0/16, 10.0.0.0/8, 172.16.0.0/12
+          const ipParts = hostname.split('.').map(Number);
+          if (ipParts.length === 4 && ipParts.every(part => !isNaN(part))) {
+            const [a, b] = ipParts;
+            if (a === 192 && b === 168) return true; // 192.168.x.x
+            if (a === 10) return true; // 10.x.x.x
+            if (a === 172 && b >= 16 && b <= 31) return true; // 172.16-31.x.x
+          }
+          
+          return false;
+        } catch {
+          return false;
+        }
+      };
+    }
 
     app.enableCors({
       origin: (origin, callback) => {
@@ -70,7 +104,11 @@ async function bootstrap() {
               callback(null, true);
             }
           } else {
-            if (allowedOrigins.includes(origin)) {
+            // Development: allow localhost, local network IPs, or exact matches
+            if (
+              allowedOrigins.includes(origin) ||
+              isLocalNetworkOrigin(origin)
+            ) {
               callback(null, true);
             } else {
               callback(new Error(`Not allowed by CORS. Origin: ${origin}`));
