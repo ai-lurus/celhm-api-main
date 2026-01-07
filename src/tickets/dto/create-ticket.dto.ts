@@ -83,6 +83,21 @@ export class CreateTicketDto {
   @IsInt()
   warrantyDays?: number;
 
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  condition?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  accessories?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  risk?: string;
+
   @ApiProperty({ required: false, description: 'Anticipo recibido' })
   @IsOptional()
   @IsDecimal()

@@ -18,44 +18,69 @@ API REST para el sistema de gestión de talleres de reparación de celulares.
 
 - Node.js >= 18.0.0
 - pnpm >= 8.0.0
-- PostgreSQL
+- Proyecto en Supabase (Existente)
 
 ## Instalación
 
+1. **Instalar dependencias**
+
 ```bash
-# Instalar dependencias
 pnpm install
-
-# Configurar variables de entorno
-cp .env.example .env
-# Editar .env con tus credenciales
-
-# Generar cliente de Prisma
-pnpm db:generate
-
-# Ejecutar migraciones
-pnpm db:migrate
 ```
+
+2. **Configurar variables de entorno**
+
+Crea un archivo `.env` en la raíz del proyecto:
+
+```bash
+touch .env
+```
+
+Agrega las siguientes variables. Es crucial usar la **Conexión Directa** (Puerto 5432) para que las migraciones funcionen correctamente desde tu entorno local, aunque la aplicación soporte Pooler en producción.
+
+```env
+# Supabase > Settings > Database > Connection string > Direct connection
+# El formato debe ser: postgresql://[user]:[password]@db.[ref].supabase.co:5432/postgres
+DATABASE_URL="postgresql://postgres:[PASSWORD]@[HOST]:5432/postgres?sslmode=require"
+
+# Opcional, solo si necesitas generar migraciones que requieren shadow db
+# SHADOW_DATABASE_URL=""
+
+# JWT Secret para firmar tokens
+JWT_SECRET="super-secret"
+
+# Puerto (Opcional, default 3001)
+API_PORT=3001
+```
+
+3. **Generar cliente de Prisma**
+
+Como la base de datos ya existe, solo necesitamos generar el cliente:
+
+```bash
+pnpm db:generate
+```
+
+> **Nota**: No ejecutes `pnpm db:migrate` a menos que tengas cambios locales en el schema que quieras aplicar a la base de datos remota de Supabase.
 
 ## Desarrollo
 
-```bash
-# Iniciar servidor de desarrollo
-pnpm dev
+Inicia el servidor de desarrollo:
 
-# El servidor estará disponible en http://localhost:3001
-# La documentación Swagger en http://localhost:3001/docs
+```bash
+pnpm dev
 ```
+
+- API: http://localhost:3001
+- Documentación (Swagger): http://localhost:3001/docs
+- Prisma Studio: `pnpm db:studio` (Para visualizar datos)
 
 ## Scripts Disponibles
 
 - `pnpm dev` - Inicia servidor en modo desarrollo
 - `pnpm build` - Compila el proyecto
-- `pnpm start:prod` - Inicia servidor en producción
-- `pnpm db:generate` - Genera cliente de Prisma
-- `pnpm db:migrate` - Ejecuta migraciones
-- `pnpm db:push` - Sincroniza schema con BD (desarrollo)
-- `pnpm db:studio` - Abre Prisma Studio
+- `pnpm db:generate` - Genera el cliente de Prisma (Ejecutar tras cambios en .env o schema)
+- `pnpm db:studio` - Abre interfaz visual para la BD
 - `pnpm test` - Ejecuta tests
 - `pnpm lint` - Ejecuta linter
 
