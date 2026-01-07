@@ -84,6 +84,21 @@ export class UpdateTicketDto {
   @IsInt()
   warrantyDays?: number;
 
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  condition?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  accessories?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  risk?: string;
+
   @ApiPropertyOptional({ description: 'Anticipo recibido' })
   @IsOptional()
   @IsNumber()

@@ -13,7 +13,7 @@ export class TicketsService {
   constructor(
     private prisma: PrismaService,
     private foliosService: FoliosService,
-  ) {}
+  ) { }
 
   async createTicket(createTicketDto: CreateTicketDto, user: AuthUser) {
     // PgBouncer transaction mode: Generate folio first (handles its own atomicity)
@@ -188,6 +188,9 @@ export class TicketsService {
         finalCost: updateTicketDto.finalCost ?? ticket.finalCost,
         estimatedTime: updateTicketDto.estimatedTime ?? ticket.estimatedTime,
         warrantyDays: updateTicketDto.warrantyDays ?? ticket.warrantyDays,
+        condition: updateTicketDto.condition ?? ticket.condition,
+        accessories: updateTicketDto.accessories ?? ticket.accessories,
+        risk: updateTicketDto.risk ?? ticket.risk,
       },
     });
   }
@@ -222,7 +225,7 @@ export class TicketsService {
     if (updateTicketStateDto.state === TicketState.ENTREGADO) {
       const finalCost = Number(updateTicketStateDto.finalCost || ticket.finalCost || 0);
       const advancePayment = Number(ticket.advancePayment || 0);
-      
+
       // Get total payments from sales
       const sales = await this.prisma.sale.findMany({
         where: {

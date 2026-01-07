@@ -316,6 +316,9 @@ model Ticket {
   advancePayment  Decimal?       @db.Decimal(10, 2) // RF-ORD-05: Anticipos
   internalNotes   String?        // RF-ORD-06: Notas internas
   estimatedTime   Int?           // días
+  condition       String?        // Estado del uso del celular
+  accessories     String?        // Accesorios recibidos
+  risk            String?        // Observaciones / Riesgo
   warrantyDays    Int            @default(15)
   movements       Movement[]
   parts           TicketPart[]
