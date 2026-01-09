@@ -26,11 +26,23 @@ export class CreateInventoryItemDto {
   @IsString()
   sku?: string;
 
-  @ApiProperty({ description: 'Unit price', required: false })
+  @ApiProperty({ description: 'Unit sale price', required: false })
   @IsOptional()
   @IsNumber()
   @Min(0)
   price?: number;
+
+  @ApiProperty({ description: 'Unit purchase price', required: false })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  purchasePrice?: number;
+
+  @ApiProperty({ description: 'Barcode', required: false })
+  @IsOptional()
+  @IsString()
+  barcode?: string;
+
 
   @ApiProperty({ description: 'Initial stock quantity', default: 0 })
   @IsInt()
