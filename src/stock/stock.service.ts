@@ -334,6 +334,7 @@ export class StockService {
         brand: dto.brand,
         model: dto.model,
         price: dto.price,
+        purchasePrice: dto.purchasePrice,
       },
     });
 

@@ -32,6 +32,12 @@ export class CreateInventoryItemDto {
   @Min(0)
   price?: number;
 
+  @ApiProperty({ description: 'Purchase price', required: false })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  purchasePrice?: number;
+
   @ApiProperty({ description: 'Initial stock quantity', default: 0 })
   @IsInt()
   @Min(0)
