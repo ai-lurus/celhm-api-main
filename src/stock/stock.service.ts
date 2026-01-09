@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { AuthUser } from '../auth/auth.service';
 import { CreateInventoryItemDto } from './dto/create-inventory-item.dto';
@@ -315,6 +315,32 @@ export class StockService {
       throw new Error('BranchId is required');
     }
 
+    // Generate or validate SKU
+    let sku = dto.sku;
+    if (!sku) {
+      // Generate unique SKU if not provided
+      let attempts = 0;
+      do {
+        sku = `SKU-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+        const existing = await this.prisma.variant.findUnique({
+          where: { sku },
+        });
+        if (!existing) break;
+        attempts++;
+        if (attempts > 10) {
+          throw new BadRequestException('Unable to generate unique SKU. Please provide a SKU manually.');
+        }
+      } while (true);
+    } else {
+      // Check if SKU already exists
+      const existing = await this.prisma.variant.findUnique({
+        where: { sku },
+      });
+      if (existing) {
+        throw new BadRequestException(`SKU "${sku}" already exists. Please use a different SKU.`);
+      }
+    }
+
     // PgBouncer transaction mode: Sequential creation (no interactive transaction)
     // Create product first
     const product = await this.prisma.product.create({
@@ -329,7 +355,7 @@ export class StockService {
     const variant = await this.prisma.variant.create({
       data: {
         productId: product.id,
-        sku: dto.sku || `SKU-${Date.now()}`,
+        sku,
         name: dto.name,
         brand: dto.brand,
         model: dto.model,
