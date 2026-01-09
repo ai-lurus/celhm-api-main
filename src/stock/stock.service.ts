@@ -335,6 +335,7 @@ export class StockService {
         model: dto.model,
         price: dto.price,
         purchasePrice: dto.purchasePrice,
+        barcode: dto.barcode,
       },
     });
 

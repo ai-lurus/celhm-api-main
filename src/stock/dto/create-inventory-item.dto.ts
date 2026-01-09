@@ -26,6 +26,11 @@ export class CreateInventoryItemDto {
   @IsString()
   sku?: string;
 
+  @ApiProperty({ description: 'Barcode', required: false })
+  @IsOptional()
+  @IsString()
+  barcode?: string;
+
   @ApiProperty({ description: 'Unit price', required: false })
   @IsOptional()
   @IsNumber()
