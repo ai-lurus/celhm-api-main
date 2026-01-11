@@ -1,14 +1,14 @@
 const { NestFactory } = require('@nestjs/core');
 const { ValidationPipe } = require('@nestjs/common');
 const { SwaggerModule, DocumentBuilder } = require('@nestjs/swagger');
-const { AppModule } = require('../dist/src/app.module');
+const { AppModule } = require('../dist/app.module');
 
 let cachedApp;
 
 async function bootstrap() {
   if (!cachedApp) {
     console.log('🚀 [BOOTSTRAP] Creating NestJS application for Vercel...');
-    
+
     // Log environment variables status (without sensitive data)
     console.log('📋 [BOOTSTRAP] Environment check:');
     console.log('   VERCEL:', process.env.VERCEL || 'not set');
@@ -25,26 +25,26 @@ async function bootstrap() {
       }
     }
     console.log('   JWT_SECRET:', process.env.JWT_SECRET ? '✅ configured' : '❌ NOT SET');
-    
+
     // Create NestJS app (it uses Express by default)
     const app = await NestFactory.create(AppModule, {
       logger: ['error', 'warn', 'log'], // Include 'log' to see PrismaService logs
     });
-    
+
     // Enable CORS - Allow all origins in production for now, can be restricted later
     const isProduction = process.env.NODE_ENV === 'production' || process.env.VERCEL === '1';
     const hasExplicitCorsOrigins = process.env.CORS_ORIGINS && process.env.CORS_ORIGINS.trim() !== '';
-    
+
     const allowedOrigins = hasExplicitCorsOrigins
       ? process.env.CORS_ORIGINS.split(',').map(origin => origin.trim())
       : isProduction
-      ? [] // Empty means we'll use pattern matching
-      : ['http://localhost:3000', 'http://localhost:3001'];
-    
+        ? [] // Empty means we'll use pattern matching
+        : ['http://localhost:3000', 'http://localhost:3001'];
+
     // Import helper function from compiled utils
     let isLocalNetworkOrigin;
     try {
-      const corsUtils = require('../dist/src/common/utils/cors.utils');
+      const corsUtils = require('../dist/common/utils/cors.utils');
       isLocalNetworkOrigin = corsUtils.isLocalNetworkOrigin;
     } catch (e) {
       // Fallback if compiled code is not available
@@ -52,12 +52,12 @@ async function bootstrap() {
         try {
           const url = new URL(origin);
           const hostname = url.hostname;
-          
+
           // Allow localhost and 127.0.0.1
           if (hostname === 'localhost' || hostname === '127.0.0.1') {
             return true;
           }
-          
+
           // Allow private network IP ranges
           // 192.168.0.0/16, 10.0.0.0/8, 172.16.0.0/12
           const ipParts = hostname.split('.').map(Number);
@@ -67,7 +67,7 @@ async function bootstrap() {
             if (a === 10) return true; // 10.x.x.x
             if (a === 172 && b >= 16 && b <= 31) return true; // 172.16-31.x.x
           }
-          
+
           return false;
         } catch {
           return false;
@@ -81,7 +81,7 @@ async function bootstrap() {
         if (!origin) {
           return callback(null, true);
         }
-        
+
         if (hasExplicitCorsOrigins) {
           if (allowedOrigins.includes(origin)) {
             callback(null, true);
@@ -92,7 +92,7 @@ async function bootstrap() {
           // In production without explicit CORS_ORIGINS, allow vercel.app domains and common origins
           if (isProduction) {
             if (
-              origin.endsWith('.vercel.app') || 
+              origin.endsWith('.vercel.app') ||
               origin === 'https://vercel.app' ||
               origin.includes('localhost') ||
               origin.includes('127.0.0.1')
@@ -140,9 +140,9 @@ async function bootstrap() {
       .setVersion('1.0')
       .addBearerAuth()
       .build();
-    
+
     const document = SwaggerModule.createDocument(app, config);
-    
+
     // Configure Swagger with custom options for Vercel
     // Use CDN for Swagger UI assets to avoid static file serving issues
     SwaggerModule.setup('docs', app, document, {
@@ -163,11 +163,11 @@ async function bootstrap() {
 
     // Initialize the app (but don't listen - Vercel handles that)
     await app.init();
-    
+
     cachedApp = app;
     console.log('✅ [BOOTSTRAP] Application cached and ready for Vercel');
   }
-  
+
   return cachedApp;
 }
 
@@ -182,7 +182,7 @@ module.exports = async (req, res) => {
     console.error('❌ Error in Vercel handler:', error);
     console.error('Stack:', error.stack);
     if (!res.headersSent) {
-      res.status(500).json({ 
+      res.status(500).json({
         error: 'Internal server error',
         message: error.message,
         stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
