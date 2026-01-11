@@ -7,7 +7,7 @@ import { UpdateVariantDto } from './dto/update-variant.dto';
 
 @Injectable()
 export class CatalogService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService) { }
 
   async getProducts(filters?: {
     categoria?: string;
@@ -128,23 +128,17 @@ export class CatalogService {
     const where: any = {};
     const andConditions: any[] = [];
 
-    // Brand filter (OR between variant and product brand)
+    // Brand filter (product brand)
     if (filters?.marca) {
       andConditions.push({
-        OR: [
-          { brand: { contains: filters.marca, mode: 'insensitive' } },
-          { product: { brand: { contains: filters.marca, mode: 'insensitive' } } },
-        ],
+        product: { brand: { contains: filters.marca, mode: 'insensitive' } },
       });
     }
 
-    // Model filter (OR between variant and product model)
+    // Model filter (product model)
     if (filters?.modelo) {
       andConditions.push({
-        OR: [
-          { model: { contains: filters.modelo, mode: 'insensitive' } },
-          { product: { model: { contains: filters.modelo, mode: 'insensitive' } } },
-        ],
+        product: { model: { contains: filters.modelo, mode: 'insensitive' } },
       });
     }
 
@@ -167,7 +161,6 @@ export class CatalogService {
       andConditions.push({
         OR: [
           { sku: { contains: filters.q, mode: 'insensitive' } },
-          { name: { contains: filters.q, mode: 'insensitive' } },
           { product: { name: { contains: filters.q, mode: 'insensitive' } } },
         ],
       });
@@ -209,19 +202,42 @@ export class CatalogService {
     };
   }
 
-  async createVariant(createVariantDto: CreateVariantDto) {
+  async createVariant(dto: CreateVariantDto) {
     return this.prisma.variant.create({
-      data: createVariantDto,
+      data: {
+        productId: dto.productId,
+        sku: dto.sku,
+        name: dto.name,
+        description: dto.description,
+        color: dto.color,
+        size: dto.size,
+        weight: dto.weight,
+        dimensions: dto.dimensions,
+        price: dto.price,
+        purchasePrice: dto.purchasePrice,
+        barcode: dto.barcode,
+      },
       include: {
         product: true,
       },
     });
   }
 
-  async updateVariant(id: number, updateVariantDto: UpdateVariantDto) {
+  async updateVariant(id: number, dto: UpdateVariantDto) {
     return this.prisma.variant.update({
       where: { id },
-      data: updateVariantDto,
+      data: {
+        sku: dto.sku,
+        name: dto.name,
+        description: dto.description,
+        color: dto.color,
+        size: dto.size,
+        weight: dto.weight,
+        dimensions: dto.dimensions,
+        price: dto.price,
+        purchasePrice: dto.purchasePrice,
+        barcode: dto.barcode,
+      },
       include: {
         product: true,
       },

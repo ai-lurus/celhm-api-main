@@ -20,7 +20,7 @@ async function main() {
 
   // Create demo branch
   const branch = await prisma.branch.upsert({
-    where: { 
+    where: {
       organizationId_code: {
         organizationId: organization.id,
         code: 'SUC01'
@@ -41,7 +41,7 @@ async function main() {
 
   // Create second branch
   const branch2 = await prisma.branch.upsert({
-    where: { 
+    where: {
       organizationId_code: {
         organizationId: organization.id,
         code: 'SUC02'
@@ -62,7 +62,7 @@ async function main() {
 
   // Create demo users
   const hashedPassword = await hash('ChangeMe123!', 10);
-  
+
   const users = [
     {
       email: 'direccion@acme-repair.com',
@@ -251,8 +251,6 @@ async function main() {
           sku: variantData.sku,
           name: variantData.name,
           description: `${productData.description} - ${variantData.color}`,
-          brand: productData.brand,
-          model: productData.model,
           color: variantData.color,
           price: Math.floor(Math.random() * 2000) + 100, // Random price between 100-2100
         },
@@ -274,7 +272,7 @@ async function main() {
     const variant = createdVariants[i];
     const config = stockConfigs[i % stockConfigs.length];
     const qty = Math.floor(Math.random() * (config.qtyRange[1] - config.qtyRange[0] + 1)) + config.qtyRange[0];
-    
+
     // Stock for branch 1
     await prisma.stock.upsert({
       where: {
@@ -447,13 +445,13 @@ async function main() {
 
     for (let j = 0; j < historyStates.length; j++) {
       const state = historyStates[j];
-      const notes = j === 0 ? 'Ticket creado' : 
-                    state === TicketState.DIAGNOSTICO ? 'Diagnóstico realizado' :
-                    state === TicketState.ESPERANDO_PIEZA ? 'Esperando pieza en stock' :
-                    state === TicketState.EN_REPARACION ? 'En proceso de reparación' :
-                    state === TicketState.REPARADO ? 'Reparación completada' :
-                    state === TicketState.ENTREGADO ? 'Ticket entregado al cliente' : '';
-      
+      const notes = j === 0 ? 'Ticket creado' :
+        state === TicketState.DIAGNOSTICO ? 'Diagnóstico realizado' :
+          state === TicketState.ESPERANDO_PIEZA ? 'Esperando pieza en stock' :
+            state === TicketState.EN_REPARACION ? 'En proceso de reparación' :
+              state === TicketState.REPARADO ? 'Reparación completada' :
+                state === TicketState.ENTREGADO ? 'Ticket entregado al cliente' : '';
+
       await prisma.ticketHistory.create({
         data: {
           ticketId: ticket.id,
@@ -548,7 +546,7 @@ async function main() {
   for (let i = 0; i < movements.length; i++) {
     const movementData = movements[i];
     const variantIndex = i % Math.min(createdVariants.length, 5); // Cycle through first 5 variants
-    
+
     await prisma.movement.create({
       data: {
         ...movementData,

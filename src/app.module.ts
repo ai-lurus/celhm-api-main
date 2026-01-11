@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { BullModule } from '@nestjs/bull';
 import { APP_INTERCEPTOR } from '@nestjs/core';
 
@@ -22,8 +22,7 @@ import { ReportsModule } from './reports/reports.module';
 import { PrismaModule } from './common/prisma/prisma.module';
 import { AuditInterceptor } from './common/interceptors/audit.interceptor';
 import { SecurityHeadersInterceptor } from './common/interceptors/security-headers.interceptor';
-import { RateLimitInterceptor } from './common/interceptors/rate-limit.interceptor';
-import { APP_FILTER } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 
 @Module({
@@ -83,8 +82,8 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
       useClass: AuditInterceptor,
     },
     {
-      provide: APP_INTERCEPTOR,
-      useClass: RateLimitInterceptor,
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
     },
     {
       provide: APP_FILTER,
@@ -92,4 +91,4 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
     },
   ],
 })
-export class AppModule {}
+export class AppModule { }

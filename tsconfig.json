@@ -18,11 +18,21 @@
     "forceConsistentCasingInFileNames": false,
     "noFallthroughCasesInSwitch": false,
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": [
+        "src/*"
+      ]
     }
   },
-  "include": ["src/**/*", "prisma/**/*"],
-  "exclude": ["node_modules", "dist", "test"],
-  "typeRoots": ["./node_modules/@types", "./node_modules/.prisma/client"]
+  "include": [
+    "src/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "test"
+  ],
+  "typeRoots": [
+    "./node_modules/@types",
+    "./node_modules/.prisma/client"
+  ]
 }
-

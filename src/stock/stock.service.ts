@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { AuthUser } from '../auth/auth.service';
 import { CreateInventoryItemDto } from './dto/create-inventory-item.dto';
@@ -6,7 +6,7 @@ import { UpdateInventoryItemDto } from './dto/update-inventory-item.dto';
 
 @Injectable()
 export class StockService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService) { }
 
   async getStock(
     branchId: number,
@@ -33,51 +33,29 @@ export class StockService {
     };
 
     if (filters?.marca) {
-      where.OR = [
-        ...(where.OR || []),
-        {
-          variant: {
-            brand: {
-              contains: filters.marca,
-              mode: 'insensitive',
-            },
+      where.variant = {
+        ...(where.variant || {}),
+        product: {
+          ...(where.variant?.product || {}),
+          brand: {
+            contains: filters.marca,
+            mode: 'insensitive',
           },
         },
-        {
-          variant: {
-            product: {
-              brand: {
-                contains: filters.marca,
-                mode: 'insensitive',
-              },
-            },
-          },
-        },
-      ];
+      };
     }
 
     if (filters?.modelo) {
-      where.OR = [
-        ...(where.OR || []),
-        {
-          variant: {
-            model: {
-              contains: filters.modelo,
-              mode: 'insensitive',
-            },
+      where.variant = {
+        ...(where.variant || {}),
+        product: {
+          ...(where.variant?.product || {}),
+          model: {
+            contains: filters.modelo,
+            mode: 'insensitive',
           },
         },
-        {
-          variant: {
-            product: {
-              model: {
-                contains: filters.modelo,
-                mode: 'insensitive',
-              },
-            },
-          },
-        },
-      ];
+      };
     }
 
     if (filters?.categoriaId) {
@@ -312,30 +290,73 @@ export class StockService {
   async createInventoryItem(dto: CreateInventoryItemDto, user: AuthUser) {
     const branchId = dto.branchId ?? user.branchId;
     if (!branchId) {
-      throw new Error('BranchId is required');
+      throw new BadRequestException('BranchId is required');
+    }
+
+    // Generate SKU if not provided
+    let sku = dto.sku;
+    if (!sku) {
+      // Generate unique SKU if not provided
+      sku = `SKU-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
     }
 
     // PgBouncer transaction mode: Sequential creation (no interactive transaction)
     // Create product first
-    const product = await this.prisma.product.create({
-      data: {
-        name: dto.name,
-        brand: dto.brand,
-        model: dto.model,
-      },
-    });
+    let product;
+    try {
+      product = await this.prisma.product.create({
+        data: {
+          name: dto.name,
+          brand: dto.brand,
+          model: dto.model,
+        },
+      });
+    } catch (error: any) {
+      throw new BadRequestException(`Failed to create product: ${error.message}`);
+    }
 
     // Create variant with productId
-    const variant = await this.prisma.variant.create({
-      data: {
-        productId: product.id,
-        sku: dto.sku || `SKU-${Date.now()}`,
-        name: dto.name,
-        brand: dto.brand,
-        model: dto.model,
-        price: dto.price,
-      },
-    });
+    // Catch unique constraint error for SKU
+    let variant;
+    try {
+      variant = await this.prisma.variant.create({
+        data: {
+          productId: product.id,
+          sku,
+          name: dto.name,
+          price: dto.price,
+          purchasePrice: dto.purchasePrice,
+          barcode: dto.barcode,
+        },
+      });
+    } catch (error: any) {
+      // If SKU already exists, try to generate a new one or throw error
+      if (error.code === 'P2002' && error.meta?.target?.includes('sku')) {
+        // If SKU was provided by user, throw error
+        if (dto.sku) {
+          throw new BadRequestException(`SKU "${sku}" already exists. Please use a different SKU.`);
+        }
+        // If SKU was auto-generated, try again with a new one
+        // This should be rare, but handle it just in case
+        try {
+          sku = `SKU-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+          variant = await this.prisma.variant.create({
+            data: {
+              productId: product.id,
+              sku,
+              name: dto.name,
+              price: dto.price,
+              purchasePrice: dto.purchasePrice,
+              barcode: dto.barcode,
+            },
+          });
+        } catch (retryError: any) {
+          throw new BadRequestException(`Failed to create variant: ${retryError.message}`);
+        }
+      } else {
+        throw new BadRequestException(`Failed to create variant: ${error.message}`);
+      }
+    }
 
     // Create stock with variantId
     const stock = await this.prisma.stock.create({
@@ -392,8 +413,6 @@ export class StockService {
         data: {
           sku: dto.sku ?? stock.variant.sku,
           name: dto.name ?? stock.variant.name,
-          brand: dto.brand ?? stock.variant.brand,
-          model: dto.model ?? stock.variant.model,
           price: dto.price ?? stock.variant.price,
         },
       }),

@@ -11,24 +11,15 @@ export class CreateVariantDto {
   @IsString()
   sku: string;
 
-  @ApiProperty({ description: 'Variant name' })
+  @ApiPropertyOptional({ description: 'Variant name' })
+  @IsOptional()
   @IsString()
-  name: string;
+  name?: string;
 
   @ApiPropertyOptional({ description: 'Variant description' })
   @IsOptional()
   @IsString()
   description?: string;
-
-  @ApiPropertyOptional({ description: 'Brand' })
-  @IsOptional()
-  @IsString()
-  brand?: string;
-
-  @ApiPropertyOptional({ description: 'Model' })
-  @IsOptional()
-  @IsString()
-  model?: string;
 
   @ApiPropertyOptional({ description: 'Color' })
   @IsOptional()

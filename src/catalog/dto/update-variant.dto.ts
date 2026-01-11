@@ -18,16 +18,6 @@ export class UpdateVariantDto {
   @IsString()
   description?: string;
 
-  @ApiPropertyOptional({ description: 'Brand' })
-  @IsOptional()
-  @IsString()
-  brand?: string;
-
-  @ApiPropertyOptional({ description: 'Model' })
-  @IsOptional()
-  @IsString()
-  model?: string;
-
   @ApiPropertyOptional({ description: 'Color' })
   @IsOptional()
   @IsString()

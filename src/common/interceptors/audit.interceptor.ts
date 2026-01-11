@@ -6,48 +6,44 @@ import {
 } from '@nestjs/common';
 import { Observable } from 'rxjs';
 import { tap } from 'rxjs/operators';
+import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class AuditInterceptor implements NestInterceptor {
+  constructor(private readonly prisma: PrismaService) { }
+
   intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
     const request = context.switchToHttp().getRequest();
-    const response = context.switchToHttp().getResponse();
     const user = request.user;
     const method = request.method;
     const url = request.url;
-    const ip = request.ip || request.connection.remoteAddress;
+    const ip = request.ip || request.connection?.remoteAddress;
     const userAgent = request.get('User-Agent');
 
     const startTime = Date.now();
 
-    // Log all requests to /auth/login for debugging
-    if (url.includes('/auth/login') && method === 'POST') {
-      console.log('🔍 [AUDIT INTERCEPTOR] Login request intercepted:', {
-        method,
-        url,
-        body: request.body ? { email: request.body.email, passwordLength: request.body.password?.length } : 'no body',
-        ip,
-      });
-    }
-
     return next.handle().pipe(
-      tap(() => {
+      tap(async () => {
         const duration = Date.now() - startTime;
-        
+
         // Log sensitive operations
         if (this.isSensitiveOperation(method, url)) {
-          console.log(`[AUDIT] ${method} ${url} - User: ${user?.id || 'anonymous'} - IP: ${ip} - Duration: ${duration}ms`);
-          
-          // In a real implementation, you would store this in a separate audit table
-          // For now, we'll just log it
+          // Async logging to not block response
           this.logAuditEvent({
             userId: user?.id,
-            action: `${method} ${url}`,
-            ip,
-            userAgent,
-            duration,
-            timestamp: new Date(),
-          });
+            organizationId: user?.organizationId,
+            branchId: user?.branchId,
+            action: method, // e.g., POST
+            entityName: this.extractEntityName(url),
+            entityId: this.extractEntityId(url),
+            metadata: {
+              url,
+              ip,
+              userAgent,
+              duration,
+              body: ['POST', 'PUT', 'PATCH'].includes(method) ? request.body : undefined
+            },
+          }).catch(err => console.error('Failed to log audit event', err));
         }
       }),
     );
@@ -55,21 +51,59 @@ export class AuditInterceptor implements NestInterceptor {
 
   private isSensitiveOperation(method: string, url: string): boolean {
     const sensitiveMethods = ['POST', 'PUT', 'PATCH', 'DELETE'];
+    // Filter out login/auth from body logging if needed, or handle in metadata
     const sensitivePaths = [
       '/tickets',
       '/movements',
       '/stock',
       '/auth',
       '/notify',
+      '/sales',
+      '/customers'
     ];
 
-    return sensitiveMethods.includes(method) && 
-           sensitivePaths.some(path => url.includes(path));
+    return sensitiveMethods.includes(method) &&
+      sensitivePaths.some(path => url.includes(path));
   }
 
-  private logAuditEvent(event: any) {
-    // TODO: Store in audit table
-    console.log('Audit Event:', JSON.stringify(event, null, 2));
+  private extractEntityName(url: string): string {
+    const parts = url.split('/').filter(p => p);
+    return parts[0] || 'unknown';
+  }
+
+  private extractEntityId(url: string): string | null {
+    // Simple heuristic: check if safe last part is a number or uuid
+    // This is basic, might need improvement
+    const parts = url.split('/');
+    const last = parts[parts.length - 1];
+    if (last && /^\d+$/.test(last)) return last;
+    return null;
+  }
+
+  private async logAuditEvent(data: {
+    userId?: number;
+    organizationId?: number;
+    branchId?: number;
+    action: string;
+    entityName: string;
+    entityId?: string;
+    metadata: any;
+  }) {
+    try {
+      await this.prisma.auditLog.create({
+        data: {
+          userId: data.userId,
+          organizationId: data.organizationId,
+          branchId: data.branchId,
+          action: data.action,
+          entityName: data.entityName,
+          entityId: data.entityId,
+          metadata: data.metadata,
+        }
+      });
+    } catch (e) {
+      console.error('Audit Log Error:', e);
+    }
   }
 }
 
