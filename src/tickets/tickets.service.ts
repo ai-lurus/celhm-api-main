@@ -7,6 +7,7 @@ import { CreateTicketDto } from './dto/create-ticket.dto';
 import { UpdateTicketStateDto } from './dto/update-ticket-state.dto';
 import { AddTicketPartDto } from './dto/add-ticket-part.dto';
 import { UpdateTicketDto } from './dto/update-ticket.dto';
+import { FindTicketsDto } from './dto/find-tickets.dto';
 
 @Injectable()
 export class TicketsService {
@@ -36,6 +37,105 @@ export class TicketsService {
     });
 
     return ticket;
+  }
+
+  async findAll(filters: FindTicketsDto, user: AuthUser) {
+    const {
+      page = 1,
+      pageSize = 10,
+      branchId,
+      state,
+      startDate,
+      endDate,
+      search,
+      sortBy = 'createdAt',
+      sortOrder = 'desc',
+    } = filters;
+
+    const skip = (page - 1) * pageSize;
+
+    const where: any = {
+      branch: { organizationId: user.organizationId },
+    };
+
+    if (branchId) {
+      where.branchId = branchId;
+    }
+
+    if (state) {
+      where.state = state;
+    }
+
+    if (startDate || endDate) {
+      where.createdAt = {};
+      if (startDate) {
+        where.createdAt.gte = startDate;
+      }
+      if (endDate) {
+        where.createdAt.lte = endDate;
+      }
+    }
+
+    if (search) {
+      where.OR = [
+        { folio: { contains: search, mode: 'insensitive' } },
+        { customerName: { contains: search, mode: 'insensitive' } },
+        { customerPhone: { contains: search, mode: 'insensitive' } },
+        { device: { contains: search, mode: 'insensitive' } },
+        { brand: { contains: search, mode: 'insensitive' } },
+        { model: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+
+    const [tickets, total] = await Promise.all([
+      this.prisma.ticket.findMany({
+        where,
+        include: {
+          parts: {
+            include: {
+              variant: {
+                include: {
+                  product: {
+                    select: {
+                      name: true,
+                      brand: true,
+                      model: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+          user: {
+            select: {
+              name: true,
+              email: true,
+            },
+          },
+          branch: {
+            select: {
+              id: true,
+              name: true,
+              code: true,
+            },
+          },
+        },
+        orderBy: { [sortBy]: sortOrder },
+        skip,
+        take: pageSize,
+      }),
+      this.prisma.ticket.count({ where }),
+    ]);
+
+    return {
+      data: tickets,
+      pagination: {
+        page,
+        pageSize,
+        total,
+        totalPages: Math.ceil(total / pageSize),
+      },
+    };
   }
 
   async getTickets(branchId: number, organizationId: number, filters?: {
