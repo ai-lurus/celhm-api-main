@@ -3,7 +3,7 @@ import { AuthGuard } from '@nestjs/passport';
 import { Reflector } from '@nestjs/core';
 
 @Injectable()
-export class JwtAuthGuard extends AuthGuard(['jwt', 'supabase']) {
+export class JwtAuthGuard extends AuthGuard(['supabase']) {
   constructor(private reflector: Reflector) {
     super();
   }
@@ -13,7 +13,7 @@ export class JwtAuthGuard extends AuthGuard(['jwt', 'supabase']) {
     const url = request.url;
 
     // Allow public endpoints (login, health check, etc.)
-    const publicPaths = ['/auth/login', '/health', '/docs'];
+    const publicPaths = ['/health', '/docs'];
     const isPublicPath = publicPaths.some(path => url.startsWith(path));
 
     if (isPublicPath) {
