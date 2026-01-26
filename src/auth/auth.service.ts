@@ -1,6 +1,9 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { Role } from '@prisma/client';
+import { RegisterUserDto } from './dto/register-user.dto';
+import { ConfigService } from '@nestjs/config';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 export interface AuthUser {
   id: number;
@@ -13,9 +16,24 @@ export interface AuthUser {
 
 @Injectable()
 export class AuthService {
+  private supabaseAdmin: SupabaseClient;
+
   constructor(
     private prisma: PrismaService,
-  ) { }
+    private configService: ConfigService,
+  ) {
+    const supabaseUrl = this.configService.get<string>('SUPABASE_URL');
+    const supabaseServiceKey = this.configService.get<string>('SUPABASE_SERVICE_ROLE_KEY');
+
+    if (supabaseUrl && supabaseServiceKey) {
+      this.supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false
+        }
+      });
+    }
+  }
 
 
   async validateSupabaseUser(user: any): Promise<AuthUser | null> {
@@ -118,6 +136,70 @@ export class AuthService {
       };
     } catch (error) {
       return null;
+    }
+  }
+
+
+  async registerUser(dto: RegisterUserDto): Promise<AuthUser> {
+    if (!this.supabaseAdmin) {
+      throw new Error('Supabase Admin client not initialized. Check SUPABASE_SERVICE_ROLE_KEY.');
+    }
+
+    const { email, name, organizationId, role, branchId } = dto;
+
+    // 1. Invite user in Supabase
+    const { data, error } = await this.supabaseAdmin.auth.admin.inviteUserByEmail(email);
+
+    if (error) {
+      console.error('Error inviting user to Supabase:', error);
+      throw new Error(`Failed to invite user: ${error.message}`);
+    }
+
+    const supabaseUser = data.user;
+
+    if (!supabaseUser) {
+      throw new Error('Supabase user creation failed unexpectedly.');
+    }
+
+    // 2. Create User in Local DB
+    try {
+      const newUser = await this.prisma.user.create({
+        data: {
+          email: supabaseUser.email,
+          authUserId: supabaseUser.id,
+          name: name,
+          defaultOrganizationId: organizationId,
+          role: role, // Default role on user itself, though typically handled via membership
+          branchId: branchId,
+          memberships: {
+            create: {
+              organizationId: organizationId,
+              role: role
+            }
+          }
+        },
+        include: {
+          memberships: {
+            include: { organization: true }
+          }
+        }
+      });
+
+      return {
+        id: newUser.id,
+        email: newUser.email,
+        name: newUser.name,
+        role: newUser.memberships[0].role,
+        organizationId: newUser.memberships[0].organizationId,
+        branchId: newUser.branchId
+      };
+    } catch (dbError) {
+      // Rollback supabase user if DB fails? 
+      // Ideally yes, but for now we just log/throw. 
+      // Ideally we would delete the supabase user to keep state consistent.
+      await this.supabaseAdmin.auth.admin.deleteUser(supabaseUser.id);
+      console.error('Error creating local user, rolled back Supabase user:', dbError);
+      throw new Error('Failed to create local user record.');
     }
   }
 }
