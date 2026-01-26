@@ -46,8 +46,9 @@ DATABASE_URL="postgresql://postgres:[PASSWORD]@[HOST]:5432/postgres?sslmode=requ
 # Opcional, solo si necesitas generar migraciones que requieren shadow db
 # SHADOW_DATABASE_URL=""
 
-# JWT Secret para firmar tokens
-JWT_SECRET="super-secret"
+# Supabase Service Role Key (para verificación backend y administración)
+SUPABASE_SECRET_KEY="sb_secret_..."
+SUPABASE_URL="https://your-project.supabase.co"
 
 # Puerto (Opcional, default 3001)
 API_PORT=3001
@@ -111,7 +112,8 @@ Ver `env.example` para la lista completa de variables requeridas.
 Las principales son:
 - `DATABASE_URL` - URL de conexión a PostgreSQL
 - `SHADOW_DATABASE_URL` - URL de base de datos shadow para migraciones
-- `JWT_SECRET` - Secret para JWT tokens
+- `SUPABASE_URL` - URL del proyecto Supabase
+- `SUPABASE_SECRET_KEY` - Service Role Key para operaciones administrativas y verificación de tokens
 - `API_PORT` - Puerto del servidor (default: 3001)
 
 ## Documentación

@@ -24,7 +24,7 @@ async function bootstrap() {
         console.log('   DB URL: ⚠️ Invalid format');
       }
     }
-    console.log('   JWT_SECRET:', process.env.JWT_SECRET ? '✅ configured' : '❌ NOT SET');
+    console.log('   SUPABASE_SECRET_KEY:', process.env.SUPABASE_SECRET_KEY ? '✅ configured' : '❌ NOT SET');
 
     // Create NestJS app (it uses Express by default)
     const app = await NestFactory.create(AppModule, {
