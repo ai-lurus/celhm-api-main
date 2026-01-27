@@ -1,7 +1,7 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { TicketState } from '@prisma/client';
 import { Type } from 'class-transformer';
-import { IsEnum, IsInt, IsOptional, IsString, Min, Max, IsDate } from 'class-validator';
+import { IsEnum, IsInt, IsOptional, IsString, Min, Max, IsDate, IsBoolean } from 'class-validator';
 
 export class FindTicketsDto {
     @ApiPropertyOptional({ minimum: 1, default: 1 })
@@ -11,11 +11,11 @@ export class FindTicketsDto {
     @IsOptional()
     page?: number = 1;
 
-    @ApiPropertyOptional({ minimum: 1, maximum: 100, default: 10 })
+    @ApiPropertyOptional({ minimum: 1, maximum: 1000, default: 10 })
     @Type(() => Number)
     @IsInt()
     @Min(1)
-    @Max(100)
+    @Max(1000)
     @IsOptional()
     pageSize?: number = 10;
 
@@ -46,6 +46,12 @@ export class FindTicketsDto {
     @IsString()
     @IsOptional()
     search?: string;
+
+    @ApiPropertyOptional()
+    @Type(() => Boolean)
+    @IsBoolean()
+    @IsOptional()
+    kanban?: boolean;
 
     @ApiPropertyOptional({ default: 'createdAt' })
     @IsString()
