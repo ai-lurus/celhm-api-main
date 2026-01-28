@@ -50,6 +50,7 @@ export class TicketsService {
       search,
       sortBy = 'createdAt',
       sortOrder = 'desc',
+      kanban,
     } = filters;
 
     const skip = (page - 1) * pageSize;
@@ -64,6 +65,10 @@ export class TicketsService {
 
     if (state) {
       where.state = state;
+    } else if (kanban) {
+      where.state = {
+        notIn: [TicketState.ENTREGADO, TicketState.CANCELADO],
+      };
     }
 
     if (startDate || endDate) {
