@@ -323,9 +323,6 @@ export class TicketsService {
       throw new Error('Ticket not found');
     }
 
-    // Validate state transition
-    this.validateStateTransition(ticket.state, updateTicketStateDto.state, user.role);
-
     // RF-ORD-08: Validate payment before marking as ENTREGADO
     if (updateTicketStateDto.state === TicketState.ENTREGADO) {
       const finalCost = Number(updateTicketStateDto.finalCost || ticket.finalCost || 0);
@@ -428,22 +425,6 @@ export class TicketsService {
     ]);
 
     return ticketPart;
-  }
-
-  private validateStateTransition(fromState: TicketState, toState: TicketState, userRole: string) {
-    const validTransitions: Record<TicketState, TicketState[]> = {
-      [TicketState.RECIBIDO]: [TicketState.DIAGNOSTICO, TicketState.CANCELADO],
-      [TicketState.DIAGNOSTICO]: [TicketState.ESPERANDO_PIEZA, TicketState.EN_REPARACION, TicketState.CANCELADO],
-      [TicketState.ESPERANDO_PIEZA]: [TicketState.EN_REPARACION, TicketState.CANCELADO],
-      [TicketState.EN_REPARACION]: [TicketState.REPARADO, TicketState.CANCELADO],
-      [TicketState.REPARADO]: [TicketState.ENTREGADO],
-      [TicketState.ENTREGADO]: [],
-      [TicketState.CANCELADO]: [],
-    };
-
-    if (!validTransitions[fromState].includes(toState)) {
-      throw new Error(`Invalid state transition from ${fromState} to ${toState}`);
-    }
   }
 
   // PgBouncer compatible: No transaction context needed
