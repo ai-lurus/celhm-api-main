@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsOptional, IsInt, IsEmail, IsPhoneNumber, IsDecimal } from 'class-validator';
+import { IsString, IsOptional, IsInt, IsEmail, IsPhoneNumber, IsNumber } from 'class-validator';
 
 export class CreateTicketDto {
   @ApiProperty()
@@ -65,12 +65,12 @@ export class CreateTicketDto {
 
   @ApiProperty({ required: false })
   @IsOptional()
-  @IsDecimal()
+  @IsNumber()
   estimatedCost?: number;
 
   @ApiProperty({ required: false })
   @IsOptional()
-  @IsDecimal()
+  @IsNumber()
   finalCost?: number;
 
   @ApiProperty({ required: false })
@@ -100,7 +100,7 @@ export class CreateTicketDto {
 
   @ApiProperty({ required: false, description: 'Anticipo recibido' })
   @IsOptional()
-  @IsDecimal()
+  @IsNumber()
   advancePayment?: number;
 
   @ApiProperty({ required: false, description: 'Notas internas visibles solo para personal' })
