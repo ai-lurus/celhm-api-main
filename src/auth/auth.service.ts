@@ -11,6 +11,7 @@ export interface AuthUser {
   name: string;
   organizationId: number;
   branchId?: number;
+  role: Role;
 }
 
 @Injectable()
