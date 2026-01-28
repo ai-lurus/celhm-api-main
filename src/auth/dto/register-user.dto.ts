@@ -18,7 +18,7 @@ export class RegisterUserDto {
     @IsNotEmpty()
     organizationId: number;
 
-    @ApiProperty({ enum: Role, example: Role.TECNICO })
+    @ApiProperty({ enum: Role, example: Role.LABORATORIO })
     @IsEnum(Role)
     @IsNotEmpty()
     role: Role;

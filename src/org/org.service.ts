@@ -4,7 +4,7 @@ import { AuthUser } from '../auth/auth.service';
 
 @Injectable()
 export class OrgService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService) { }
 
   async getCurrentOrganization(user: AuthUser) {
     return this.prisma.organization.findUnique({
@@ -33,7 +33,6 @@ export class OrgService {
             id: true,
             name: true,
             email: true,
-            role: true,
             branch: {
               select: {
                 id: true,
@@ -65,7 +64,7 @@ export class OrgService {
     if (data.name) {
       updateData.name = data.name;
     }
-    
+
     return this.prisma.organization.update({
       where: { id: user.organizationId },
       data: updateData,

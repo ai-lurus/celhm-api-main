@@ -67,7 +67,7 @@ async function main() {
     {
       email: 'direccion@acme-repair.com',
       name: 'Juan Pérez',
-      role: Role.DIRECCION,
+      role: Role.ADMINISTRADOR,
       authUserId: 'mock-auth-user-1',
     },
     {
@@ -92,7 +92,9 @@ async function main() {
         password: hashedPassword, // Update password if user exists
       },
       create: {
-        ...userData,
+        email: userData.email,
+        name: userData.name,
+        authUserId: userData.authUserId,
         password: hashedPassword, // Store hashed password
         defaultOrganizationId: organization.id,
         branchId: branch.id,
@@ -116,7 +118,7 @@ async function main() {
     });
 
     createdUsers.push(user);
-    console.log('✅ Created user:', user.name, `(${user.role})`);
+    console.log('✅ Created user:', user.name, `(${userData.role})`);
   }
 
   // Create demo products and variants

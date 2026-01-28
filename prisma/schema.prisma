@@ -45,7 +45,6 @@ model User {
   email                 String?         @unique
   name                  String?
   defaultOrganizationId Int?
-  role                  Role
   branchId              Int?
   createdAt             DateTime        @default(now())
   updatedAt             DateTime        @updatedAt
@@ -472,12 +471,10 @@ model AuditLog {
 }
 
 enum Role {
-  DIRECCION
   ADMON
   LABORATORIO
   ADMINISTRADOR
   RECEPCIONISTA
-  TECNICO
 }
 
 enum TicketState {
@@ -524,3 +521,4 @@ enum SaleStatus {
   PAGADO
   CANCELADO
 }
+

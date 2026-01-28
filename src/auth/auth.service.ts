@@ -9,7 +9,6 @@ export interface AuthUser {
   id: number;
   email: string;
   name: string;
-  role: Role;
   organizationId: number;
   branchId?: number;
 }
@@ -168,9 +167,8 @@ export class AuthService {
           email: supabaseUser.email,
           authUserId: supabaseUser.id,
           name: name,
-          defaultOrganizationId: organizationId,
-          role: role, // Default role on user itself, though typically handled via membership
-          branchId: branchId,
+          defaultOrganization: { connect: { id: organizationId } },
+          branch: branchId ? { connect: { id: branchId } } : undefined,
           memberships: {
             create: {
               organizationId: organizationId,
@@ -187,11 +185,11 @@ export class AuthService {
 
       return {
         id: newUser.id,
-        email: newUser.email,
-        name: newUser.name,
+        email: newUser.email || '',
+        name: newUser.name || '',
         role: newUser.memberships[0].role,
         organizationId: newUser.memberships[0].organizationId,
-        branchId: newUser.branchId
+        branchId: newUser.branchId || undefined
       };
     } catch (dbError) {
       // Rollback supabase user if DB fails? 

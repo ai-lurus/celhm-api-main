@@ -4,13 +4,13 @@ import { AuthUser } from '../auth/auth.service';
 
 @Injectable()
 export class BranchesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService) { }
 
   async getBranches(organizationId: number) {
     return this.prisma.branch.findMany({
-      where: { 
+      where: {
         organizationId,
-        active: true 
+        active: true
       },
       orderBy: { name: 'asc' },
       include: {
@@ -27,9 +27,9 @@ export class BranchesService {
 
   async getBranchById(branchId: number, organizationId: number) {
     return this.prisma.branch.findFirst({
-      where: { 
+      where: {
         id: branchId,
-        organizationId 
+        organizationId
       },
       include: {
         users: {
@@ -37,7 +37,10 @@ export class BranchesService {
             id: true,
             name: true,
             email: true,
-            role: true,
+            memberships: {
+              where: { organizationId },
+              select: { role: true }
+            },
           },
         },
         _count: {
