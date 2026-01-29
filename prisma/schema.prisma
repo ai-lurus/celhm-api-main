@@ -14,6 +14,15 @@ model Organization {
   id           Int                    @id @default(autoincrement())
   name         String
   slug         String                 @unique
+  logo          String?             
+  phone         String?             
+  address       String?             
+  email         String?             
+  taxId         String?             
+  website       String?             
+  currency      String                @default("MXN") 
+  timezone      String                @default("America/Mexico_City") 
+  vatRate       Decimal               @default(0.16) @db.Decimal(10, 2) 
   createdAt    DateTime               @default(now())
   updatedAt    DateTime               @updatedAt
   branches     Branch[]
@@ -21,7 +30,7 @@ model Organization {
   templates    NotificationTemplate[]
   users        OrgMembership[]
   defaultUsers User[]                 @relation("DefaultOrganization")
-
+  
   @@map("organizations")
 }
 
