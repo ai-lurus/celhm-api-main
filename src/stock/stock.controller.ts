@@ -1,7 +1,9 @@
-// @ts-nocheck
 import { Controller, Get, Patch, Body, Param, UseGuards, Query, Post, Delete } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { Roles } from '../common/decorators/roles.decorator';
+import { Role } from '@prisma/client';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AuthUser } from '../auth/auth.service';
 import { StockService } from './stock.service';
@@ -11,10 +13,11 @@ import { UpdateInventoryItemDto } from './dto/update-inventory-item.dto';
 
 @ApiTags('stock')
 @Controller('stock')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(Role.ADMINISTRADOR, Role.ADMON, Role.LABORATORIO)
 @ApiBearerAuth()
 export class StockController {
-  constructor(private stockService: StockService) {}
+  constructor(private stockService: StockService) { }
 
   @Get()
   @ApiOperation({ summary: 'Get stock by branch' })
@@ -95,4 +98,3 @@ export class StockController {
     return this.stockService.deleteInventoryItem(parseInt(id, 10), user);
   }
 }
-

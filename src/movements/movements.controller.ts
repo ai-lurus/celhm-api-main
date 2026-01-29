@@ -1,8 +1,9 @@
-// @ts-nocheck
 import { Controller, Post, Get, Body, Query, UseGuards, Req } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
-import { MovementType } from '@prisma/client';
+import { MovementType, Role } from '@prisma/client';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AuthUser } from '../auth/auth.service';
 import { MovementsService } from './movements.service';
@@ -10,10 +11,11 @@ import { CreateMovementDto } from './dto/create-movement.dto';
 
 @ApiTags('movements')
 @Controller('movements')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(Role.ADMINISTRADOR, Role.ADMON, Role.LABORATORIO)
 @ApiBearerAuth()
 export class MovementsController {
-  constructor(private movementsService: MovementsService) {}
+  constructor(private movementsService: MovementsService) { }
 
   @Post()
   @ApiOperation({ summary: 'Create movement (entrada/salida/venta/ajuste/transferencia)' })
@@ -26,7 +28,7 @@ export class MovementsController {
   ) {
     const ip = req.ip || req.connection.remoteAddress;
     const userAgent = req.get('User-Agent');
-    
+
     return this.movementsService.createMovement(createMovementDto, user, ip, userAgent);
   }
 
@@ -43,6 +45,7 @@ export class MovementsController {
   @ApiQuery({ name: 'page', required: false, description: 'Page number (1-based)', example: 1 })
   @ApiQuery({ name: 'pageSize', required: false, description: 'Items per page', example: 50 })
   async getMovements(
+    @CurrentUser() user: AuthUser,
     @Query('sucursal') sucursal?: string,
     @Query('tipo') tipo?: string,
     @Query('variantId') variantId?: string,
@@ -52,7 +55,6 @@ export class MovementsController {
     @Query('q') q?: string,
     @Query('page') page?: string,
     @Query('pageSize') pageSize?: string,
-    @CurrentUser() user: AuthUser,
   ) {
     const branchId = sucursal ? parseInt(sucursal, 10) : user.branchId || 1;
     return this.movementsService.getMovements(
