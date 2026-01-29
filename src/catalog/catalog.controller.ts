@@ -13,7 +13,7 @@ import { UpdateVariantDto } from './dto/update-variant.dto';
 @ApiTags('catalog')
 @Controller('catalog')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(Role.ADMINISTRADOR, Role.ADMON, Role.LABORATORIO)
+@Roles(Role.ADMINISTRADOR, Role.ADMON)
 @ApiBearerAuth()
 export class CatalogController {
   constructor(private catalogService: CatalogService) { }

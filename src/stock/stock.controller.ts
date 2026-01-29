@@ -14,7 +14,7 @@ import { UpdateInventoryItemDto } from './dto/update-inventory-item.dto';
 @ApiTags('stock')
 @Controller('stock')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(Role.ADMINISTRADOR, Role.ADMON, Role.LABORATORIO)
+@Roles(Role.ADMINISTRADOR, Role.ADMON)
 @ApiBearerAuth()
 export class StockController {
   constructor(private stockService: StockService) { }

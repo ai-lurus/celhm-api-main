@@ -13,7 +13,7 @@ import { SaleStatus, PaymentMethod, Role } from '@prisma/client';
 @ApiTags('sales')
 @Controller('sales')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(Role.ADMINISTRADOR, Role.ADMON)
+@Roles(Role.ADMINISTRADOR, Role.ADMON, Role.RECEPCIONISTA)
 @ApiBearerAuth()
 export class SalesController {
   constructor(private readonly salesService: SalesService) { }
