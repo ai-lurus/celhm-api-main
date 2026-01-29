@@ -1,8 +1,10 @@
 import { Controller, Post, Get, Patch, Body, Param, Query, UseGuards, Req } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
-import { TicketState } from '@prisma/client';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { Roles } from '../common/decorators/roles.decorator';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { Role } from '@prisma/client';
 import type { AuthUser } from '../auth/auth.service';
 import { TicketsService } from './tickets.service';
 import { CreateTicketDto } from './dto/create-ticket.dto';
@@ -14,7 +16,8 @@ import { TicketResponseDto, TicketsListResponseDto } from './dto/ticket-response
 
 @ApiTags('tickets')
 @Controller('tickets')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(Role.ADMINISTRADOR, Role.ADMON, Role.LABORATORIO, Role.RECEPCIONISTA)
 @ApiBearerAuth()
 export class TicketsController {
   constructor(private ticketsService: TicketsService) { }
@@ -99,6 +102,8 @@ export class TicketsController {
   })
   @ApiResponse({ status: 404, description: 'Ticket not found' })
   @ApiResponse({ status: 400, description: 'Invalid input data' })
+
+  @Roles(Role.ADMINISTRADOR, Role.ADMON, Role.LABORATORIO)
   async updateTicket(
     @Param('id') id: string,
     @Body() updateTicketDto: UpdateTicketDto,
@@ -119,6 +124,8 @@ export class TicketsController {
   })
   @ApiResponse({ status: 404, description: 'Ticket not found' })
   @ApiResponse({ status: 400, description: 'Invalid state transition or input data' })
+
+  @Roles(Role.ADMINISTRADOR, Role.ADMON, Role.LABORATORIO)
   async updateTicketState(
     @Param('id') id: string,
     @Body() updateTicketStateDto: UpdateTicketStateDto,
@@ -149,6 +156,8 @@ export class TicketsController {
   })
   @ApiResponse({ status: 404, description: 'Ticket or variant not found' })
   @ApiResponse({ status: 400, description: 'Insufficient stock or invalid input' })
+
+  @Roles(Role.ADMINISTRADOR, Role.ADMON, Role.LABORATORIO)
   async addTicketPart(
     @Param('id') id: string,
     @Body() addTicketPartDto: AddTicketPartDto,

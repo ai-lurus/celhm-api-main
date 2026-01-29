@@ -82,6 +82,24 @@ async function main() {
       role: Role.LABORATORIO,
       authUserId: 'mock-auth-user-3',
     },
+    {
+      email: 'chlau@ai-lurus.com',
+      name: 'Chlau',
+      role: Role.ADMON,
+      authUserId: '10c73b86-b7ee-42a1-ab46-d4b30259c16a',
+    },
+    {
+      email: 'nlau@ai-lurus.com',
+      name: 'Nlau',
+      role: Role.ADMON,
+      authUserId: '1d001776-05ed-49cb-a580-b66d88f057a3',
+    },
+    {
+      email: 'ascerrillos@ai-lurus.com',
+      name: 'Ascerrillos',
+      role: Role.ADMON,
+      authUserId: '0f54967d-2275-4c51-9fa9-fc089544ef87',
+    },
   ];
 
   const createdUsers = [];
@@ -467,8 +485,15 @@ async function main() {
     // Add parts to some tickets
     if (i === 3 && createdVariants.length > 0) {
       // Add LCD screen to ticket 4 (EN_REPARACION)
-      await prisma.ticketPart.create({
-        data: {
+      await prisma.ticketPart.upsert({
+        where: {
+          ticketId_variantId: {
+            ticketId: ticket.id,
+            variantId: createdVariants[0].id,
+          },
+        },
+        update: {},
+        create: {
           ticketId: ticket.id,
           variantId: createdVariants[0].id, // First LCD variant
           qty: 1,
@@ -478,8 +503,15 @@ async function main() {
     }
     if (i === 4 && createdVariants.length > 1) {
       // Add battery to ticket 5 (REPARADO)
-      await prisma.ticketPart.create({
-        data: {
+      await prisma.ticketPart.upsert({
+        where: {
+          ticketId_variantId: {
+            ticketId: ticket.id,
+            variantId: createdVariants[1].id,
+          },
+        },
+        update: {},
+        create: {
           ticketId: ticket.id,
           variantId: createdVariants[1].id, // Battery variant
           qty: 1,
@@ -489,8 +521,15 @@ async function main() {
     }
     if (i === 6 && createdVariants.length > 2) {
       // Add connector to ticket 7 (ENTREGADO)
-      await prisma.ticketPart.create({
-        data: {
+      await prisma.ticketPart.upsert({
+        where: {
+          ticketId_variantId: {
+            ticketId: ticket.id,
+            variantId: createdVariants[createdVariants.length - 1].id,
+          },
+        },
+        update: {},
+        create: {
           ticketId: ticket.id,
           variantId: createdVariants[createdVariants.length - 1].id, // Last variant (connector)
           qty: 1,

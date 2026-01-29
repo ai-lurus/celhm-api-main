@@ -1,16 +1,20 @@
 import { Controller, Get, Patch, Body, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { Roles } from '../common/decorators/roles.decorator';
+import { Role } from '@prisma/client';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthUser } from '../auth/auth.service';
 import { OrgService } from './org.service';
 
 @ApiTags('organizations')
 @Controller('orgs')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(Role.ADMINISTRADOR, Role.ADMON)
 @ApiBearerAuth()
 export class OrgController {
-  constructor(private orgService: OrgService) {}
+  constructor(private orgService: OrgService) { }
 
   @Get('me')
   @ApiOperation({ summary: 'Get current organization' })

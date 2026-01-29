@@ -1,16 +1,20 @@
 import { Controller, Get, Param, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { Roles } from '../common/decorators/roles.decorator';
+import { Role } from '@prisma/client';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthUser } from '../auth/auth.service';
 import { BranchesService } from './branches.service';
 
 @ApiTags('branches')
 @Controller('branches')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(Role.ADMINISTRADOR, Role.ADMON)
 @ApiBearerAuth()
 export class BranchesController {
-  constructor(private branchesService: BranchesService) {}
+  constructor(private branchesService: BranchesService) { }
 
   @Get()
   @ApiOperation({ summary: 'Get all branches' })

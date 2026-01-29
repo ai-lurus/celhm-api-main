@@ -1,7 +1,9 @@
-// @ts-nocheck
 import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { Roles } from '../common/decorators/roles.decorator';
+import { Role } from '@prisma/client';
 import { CatalogService } from './catalog.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
@@ -10,10 +12,11 @@ import { UpdateVariantDto } from './dto/update-variant.dto';
 
 @ApiTags('catalog')
 @Controller('catalog')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(Role.ADMINISTRADOR, Role.ADMON, Role.LABORATORIO)
 @ApiBearerAuth()
 export class CatalogController {
-  constructor(private catalogService: CatalogService) {}
+  constructor(private catalogService: CatalogService) { }
 
   @Get('products')
   @ApiOperation({ summary: 'Get products with filters and pagination' })
