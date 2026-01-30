@@ -296,6 +296,7 @@ export class TicketsService {
         condition: updateTicketDto.condition ?? ticket.condition,
         accessories: updateTicketDto.accessories ?? ticket.accessories,
         risk: updateTicketDto.risk ?? ticket.risk,
+        internalNotes: updateTicketDto.internalNotes ?? ticket.internalNotes,
       },
     });
   }
