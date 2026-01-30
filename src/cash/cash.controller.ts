@@ -2,6 +2,7 @@ import { Controller, Get, Post, Body, Param, Query, UseGuards } from '@nestjs/co
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { CashService } from './cash.service';
 import { CreateCashCutDto } from './dto/create-cash-cut.dto';
+import { CreateCashRegisterDto } from './dto/create-cash-register.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthUser } from '../auth/auth.service';
@@ -11,7 +12,7 @@ import type { AuthUser } from '../auth/auth.service';
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
 export class CashController {
-  constructor(private readonly cashService: CashService) {}
+  constructor(private readonly cashService: CashService) { }
 
   @Get('registers')
   @ApiOperation({ summary: 'Get cash registers for a branch' })
@@ -19,6 +20,18 @@ export class CashController {
   @ApiResponse({ status: 200, description: 'List of cash registers' })
   getCashRegisters(@Query('branchId') branchId: string, @CurrentUser() user: AuthUser) {
     return this.cashService.getCashRegisters(parseInt(branchId), user.organizationId);
+  }
+
+  @Post('registers')
+  @ApiOperation({ summary: 'Create a cash register' })
+  @ApiResponse({ status: 201, description: 'Cash register created successfully' })
+  createCashRegister(@Body() createCashRegisterDto: CreateCashRegisterDto, @CurrentUser() user: AuthUser) {
+    return this.cashService.createCashRegister(
+      createCashRegisterDto.branchId,
+      createCashRegisterDto.code,
+      createCashRegisterDto.name,
+      user.organizationId,
+    );
   }
 
   @Post('cuts')

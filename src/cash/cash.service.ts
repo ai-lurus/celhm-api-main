@@ -6,13 +6,22 @@ import { PaymentMethod, SaleStatus } from '@prisma/client';
 
 @Injectable()
 export class CashService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService) { }
 
-  async createCashRegister(branchId: number, code: string, name: string, organizationId: number) {
+  async createCashRegister(branchId: number, code: string | undefined, name: string, organizationId: number) {
+    let registerCode = code;
+
+    if (!registerCode) {
+      const count = await this.prisma.cashRegister.count({
+        where: { branchId },
+      });
+      registerCode = `POS-${String(count + 1).padStart(2, '0')}`;
+    }
+
     return this.prisma.cashRegister.create({
       data: {
         branchId,
-        code,
+        code: registerCode,
         name,
       },
     });
