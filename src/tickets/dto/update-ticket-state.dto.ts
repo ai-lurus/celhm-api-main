@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEnum, IsOptional, IsString, IsDecimal } from 'class-validator';
+import { IsEnum, IsOptional, IsString, IsNumber } from 'class-validator';
 import { TicketState } from '@prisma/client';
 
 // Define enum values explicitly for runtime
@@ -35,17 +35,17 @@ export class UpdateTicketStateDto {
 
   @ApiProperty({ required: false })
   @IsOptional()
-  @IsDecimal()
+  @IsNumber()
   estimatedCost?: number;
 
   @ApiProperty({ required: false })
   @IsOptional()
-  @IsDecimal()
+  @IsNumber()
   finalCost?: number;
 
   @ApiProperty({ required: false, description: 'Anticipo recibido' })
   @IsOptional()
-  @IsDecimal()
+  @IsNumber()
   advancePayment?: number;
 
   @ApiProperty({ required: false, description: 'Notas internas visibles solo para personal' })
