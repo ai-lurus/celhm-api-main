@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { AuthUser } from '../auth/auth.service';
+import { UpdateOrgDto } from './dto/update-org.dto';
 
 @Injectable()
 export class OrgService {
@@ -47,27 +48,10 @@ export class OrgService {
     });
   }
 
-  async updateOrganization(user: AuthUser, data: {
-    name?: string;
-    logo?: string;
-    address?: string;
-    phone?: string;
-    email?: string;
-    taxId?: string;
-    website?: string;
-    currency?: string;
-    timezone?: string;
-  }) {
-    // For now, only update name as other fields don't exist in schema yet
-    // TODO: Add migration to add these fields to Organization model
-    const updateData: any = {};
-    if (data.name) {
-      updateData.name = data.name;
-    }
-
+  async updateOrganization(user: AuthUser, data: UpdateOrgDto) {
     return this.prisma.organization.update({
       where: { id: user.organizationId },
-      data: updateData,
+      data,
     });
   }
 }
