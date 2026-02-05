@@ -7,6 +7,7 @@ import { Role } from '@prisma/client';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthUser } from '../auth/auth.service';
 import { OrgService } from './org.service';
+import { UpdateOrgDto } from './dto/update-org.dto';
 
 @ApiTags('organizations')
 @Controller('orgs')
@@ -29,17 +30,7 @@ export class OrgController {
   @ApiResponse({ status: 200, description: 'Organization updated successfully' })
   async updateOrganization(
     @CurrentUser() user: AuthUser,
-    @Body() data: {
-      name?: string;
-      logo?: string;
-      address?: string;
-      phone?: string;
-      email?: string;
-      taxId?: string;
-      website?: string;
-      currency?: string;
-      timezone?: string;
-    },
+    @Body() data: UpdateOrgDto,
   ) {
     return this.orgService.updateOrganization(user, data);
   }
