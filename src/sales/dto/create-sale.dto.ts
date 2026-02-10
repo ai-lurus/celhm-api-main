@@ -61,6 +61,10 @@ export class CreateSaleDto {
   @IsInt()
   ticketId?: number;
 
+  @ApiProperty({ description: 'Cash Register ID' })
+  @IsInt()
+  cashRegisterId: number;
+
   @ApiProperty({ type: [CreateSaleLineDto] })
   @IsArray()
   @ValidateNested({ each: true })
