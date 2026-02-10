@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { FoliosService } from '../folios/folios.service';
 import { AuthUser } from '../auth/auth.service';
@@ -7,10 +7,12 @@ import { PaymentMethod, SaleStatus, MovementType } from '@prisma/client';
 
 @Injectable()
 export class SalesService {
+  private readonly logger = new Logger(SalesService.name);
+
   constructor(
     private prisma: PrismaService,
     private foliosService: FoliosService,
-  ) {}
+  ) { }
 
   async create(createSaleDto: CreateSaleDto, user: AuthUser) {
     // PgBouncer transaction mode: Sequential operations instead of interactive transaction
@@ -66,7 +68,7 @@ export class SalesService {
     // If payment is provided, process it
     if (createSaleDto.payment) {
       await this.processPayment(sale.id, createSaleDto.payment, user, null);
-      
+
       // Update sale status
       await this.prisma.sale.update({
         where: { id: sale.id },
@@ -128,85 +130,99 @@ export class SalesService {
     page?: number;
     pageSize?: number;
   }) {
-    const page = filters?.page || 1;
-    const pageSize = filters?.pageSize || 50;
-    const skip = (page - 1) * pageSize;
+    try {
+      const page = filters?.page || 1;
+      const pageSize = filters?.pageSize || 50;
+      const skip = (page - 1) * pageSize;
 
-    const where: any = {
-      branch: { organizationId },
-    };
+      const where: any = {
+        branch: { organizationId },
+      };
 
-    if (filters?.branchId) {
-      where.branchId = filters.branchId;
-    }
-
-    if (filters?.customerId) {
-      where.customerId = filters.customerId;
-    }
-
-    if (filters?.ticketId) {
-      where.ticketId = filters.ticketId;
-    }
-
-    if (filters?.status) {
-      where.status = filters.status;
-    }
-
-    if (filters?.startDate || filters?.endDate) {
-      where.createdAt = {};
-      if (filters.startDate) {
-        where.createdAt.gte = filters.startDate;
+      if (filters?.branchId) {
+        where.branchId = filters.branchId;
       }
-      if (filters.endDate) {
-        where.createdAt.lte = filters.endDate;
-      }
-    }
 
-    const [sales, total] = await Promise.all([
-      this.prisma.sale.findMany({
-        where,
-        include: {
-          lines: {
-            include: {
-              variant: {
-                include: {
-                  product: true,
+      if (filters?.customerId) {
+        where.customerId = filters.customerId;
+      }
+
+      if (filters?.ticketId) {
+        where.ticketId = filters.ticketId;
+      }
+
+      if (filters?.status) {
+        where.status = filters.status;
+      }
+
+      if (filters?.startDate || filters?.endDate) {
+        where.createdAt = {};
+        if (filters.startDate) {
+          where.createdAt.gte = filters.startDate;
+        }
+        if (filters.endDate) {
+          where.createdAt.lte = filters.endDate;
+        }
+      }
+
+      const [sales, total] = await Promise.all([
+        this.prisma.sale.findMany({
+          where,
+          include: {
+            lines: {
+              include: {
+                variant: {
+                  include: {
+                    product: true,
+                  },
                 },
               },
             },
-          },
-          payments: true,
-          customer: true,
-          ticket: {
-            select: {
-              id: true,
-              folio: true,
-              state: true,
+            payments: {
+              include: {
+                user: {
+                  select: {
+                    name: true,
+                    email: true,
+                  },
+                },
+              },
+            },
+            customer: true,
+            ticket: {
+              select: {
+                id: true,
+                folio: true,
+                state: true,
+              },
+            },
+            user: {
+              select: {
+                name: true,
+                email: true,
+              },
             },
           },
-          user: {
-            select: {
-              name: true,
-              email: true,
-            },
-          },
-        },
-        orderBy: { createdAt: 'desc' },
-        skip,
-        take: pageSize,
-      }),
-      this.prisma.sale.count({ where }),
-    ]);
+          orderBy: { createdAt: 'desc' },
+          skip,
+          take: pageSize,
+        }),
+        this.prisma.sale.count({ where }),
+      ]);
 
-    return {
-      data: sales,
-      pagination: {
-        page,
-        pageSize,
-        total,
-        totalPages: Math.ceil(total / pageSize),
-      },
-    };
+      return {
+        data: sales,
+        pagination: {
+          page,
+          pageSize,
+          total,
+          totalPages: Math.ceil(total / pageSize),
+        },
+      };
+    } catch (error) {
+      this.logger.error('Error getting sales:', error);
+      throw error;
+    }
   }
 
   async findOne(id: number, organizationId: number) {
@@ -312,4 +328,3 @@ export class SalesService {
     });
   }
 }
-

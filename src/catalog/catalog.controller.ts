@@ -9,6 +9,8 @@ import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { CreateVariantDto } from './dto/create-variant.dto';
 import { UpdateVariantDto } from './dto/update-variant.dto';
+import { CreateBrandDto } from './dto/create-brand.dto';
+import { UpdateBrandDto } from './dto/update-brand.dto';
 
 @ApiTags('catalog')
 @Controller('catalog')
@@ -149,11 +151,49 @@ export class CatalogController {
   }
 
   @Get('brands')
-  @ApiOperation({ summary: 'Get all unique brands' })
-  @ApiResponse({ status: 200, description: 'List of unique brands' })
-  @Roles(Role.ADMINISTRADOR, Role.ADMON, Role.RECEPCIONISTA)
+  @ApiOperation({ summary: 'Get all brands' })
+  @ApiResponse({ status: 200, description: 'List of brands' })
+  @Roles(Role.ADMINISTRADOR, Role.ADMON, Role.RECEPCIONISTA, Role.LABORATORIO)
   async getBrands() {
-    return this.catalogService.getBrands();
+    // Return both product brands and managed device brands
+    const [productBrands, deviceBrands] = await Promise.all([
+      this.catalogService.getBrands(),
+      this.catalogService.getBrandsList(),
+    ]);
+
+    // Merge unique brands names if they are just strings, or return structured objects
+    // The frontend expects either string[] or Brand objects. 
+    // For now, let's return the structured device brands as the primary source of truth for the CRUD
+    // but we might want to include legacy product brands if they don't exist in device brands.
+
+    return deviceBrands;
+  }
+
+  @Post('brands')
+  @ApiOperation({ summary: 'Create new brand' })
+  @ApiResponse({ status: 201, description: 'Brand created successfully' })
+  @Roles(Role.ADMINISTRADOR, Role.ADMON)
+  async createBrand(@Body() createBrandDto: CreateBrandDto) {
+    return this.catalogService.createBrand(createBrandDto.name);
+  }
+
+  @Patch('brands/:id')
+  @ApiOperation({ summary: 'Update brand' })
+  @ApiResponse({ status: 200, description: 'Brand updated successfully' })
+  @Roles(Role.ADMINISTRADOR, Role.ADMON)
+  async updateBrand(
+    @Param('id') id: string,
+    @Body() updateBrandDto: UpdateBrandDto,
+  ) {
+    return this.catalogService.updateBrand(parseInt(id, 10), updateBrandDto.name);
+  }
+
+  @Delete('brands/:id')
+  @ApiOperation({ summary: 'Delete brand' })
+  @ApiResponse({ status: 200, description: 'Brand deleted successfully' })
+  @Roles(Role.ADMINISTRADOR, Role.ADMON)
+  async deleteBrand(@Param('id') id: string) {
+    return this.catalogService.deleteBrand(parseInt(id, 10));
   }
 }
 

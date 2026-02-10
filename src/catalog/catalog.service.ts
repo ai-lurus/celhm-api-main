@@ -296,5 +296,32 @@ export class CatalogService {
 
     return brands.map((b) => b.brand).filter(Boolean);
   }
+
+  // Device Brands Management
+
+  async getBrandsList() {
+    return this.prisma.deviceBrand.findMany({
+      orderBy: { name: 'asc' },
+    });
+  }
+
+  async createBrand(name: string) {
+    return this.prisma.deviceBrand.create({
+      data: { name },
+    });
+  }
+
+  async updateBrand(id: number, name: string) {
+    return this.prisma.deviceBrand.update({
+      where: { id },
+      data: { name },
+    });
+  }
+
+  async deleteBrand(id: number) {
+    return this.prisma.deviceBrand.delete({
+      where: { id },
+    });
+  }
 }
 
