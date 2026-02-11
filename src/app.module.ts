@@ -19,6 +19,7 @@ import { CustomersModule } from './customers/customers.module';
 import { SalesModule } from './sales/sales.module';
 import { CashModule } from './cash/cash.module';
 import { ReportsModule } from './reports/reports.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 import { PrismaModule } from './common/prisma/prisma.module';
 import { AuditInterceptor } from './common/interceptors/audit.interceptor';
 import { SecurityHeadersInterceptor } from './common/interceptors/security-headers.interceptor';
@@ -71,6 +72,7 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
     SalesModule,
     CashModule,
     ReportsModule,
+    DashboardModule,
   ],
   providers: [
     {
