@@ -27,6 +27,7 @@ pnpm-debug.log*
 .env.development.local
 .env.test.local
 .env.production.local
+.env.production
 
 # Vercel
 .vercel
@@ -36,7 +37,7 @@ pnpm-debug.log*
 next-env.d.ts
 
 # Prisma
-prisma/migrations/
+# Migrations should be committed to version control
 
 # IDE
 .vscode/
