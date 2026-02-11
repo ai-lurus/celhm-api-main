@@ -24,6 +24,10 @@ export class CreateCashCutDto {
   @IsNumber()
   adjustments?: number;
 
+  @ApiProperty({ description: 'Declared amount by user' })
+  @IsNumber()
+  declaredAmount: number;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()

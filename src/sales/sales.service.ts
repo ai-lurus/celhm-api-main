@@ -253,6 +253,12 @@ export class SalesService {
                 email: true,
               },
             },
+            cashRegister: {
+              select: {
+                name: true,
+                code: true,
+              },
+            },
           },
           orderBy: { createdAt: 'desc' },
           skip,
@@ -316,6 +322,12 @@ export class SalesService {
           },
         },
         branch: {
+          select: {
+            name: true,
+            code: true,
+          },
+        },
+        cashRegister: {
           select: {
             name: true,
             code: true,

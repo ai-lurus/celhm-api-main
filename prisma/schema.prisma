@@ -449,6 +449,9 @@ model CashCut {
   salesTransfer  Decimal      @default(0) @db.Decimal(10, 2)
   advances       Decimal      @default(0) @db.Decimal(10, 2)
   adjustments    Decimal      @default(0) @db.Decimal(10, 2)
+  declaredAmount Decimal      @default(0) @db.Decimal(10, 2)
+  expectedAmount Decimal      @default(0) @db.Decimal(10, 2)
+  difference     Decimal      @default(0) @db.Decimal(10, 2)
   totalIncome    Decimal      @db.Decimal(10, 2)
   finalAmount    Decimal      @db.Decimal(10, 2)
   notes          String?
