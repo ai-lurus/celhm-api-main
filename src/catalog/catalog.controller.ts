@@ -157,7 +157,7 @@ export class CatalogController {
   @ApiResponse({ status: 201, description: 'Category created successfully' })
   @Roles(Role.ADMINISTRADOR, Role.ADMON)
   async createCategory(@Body() createCategoryDto: CreateCategoryDto) {
-    return this.catalogService.createCategory(createCategoryDto.name);
+    return this.catalogService.createCategory(createCategoryDto.name, createCategoryDto.parentId);
   }
 
   @Patch('categories/:id')

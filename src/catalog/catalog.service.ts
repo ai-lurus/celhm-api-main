@@ -261,13 +261,16 @@ export class CatalogService {
 
   async getCategories() {
     return this.prisma.productCategory.findMany({
+      where: { parentId: null },
+      include: { children: { orderBy: { name: 'asc' } } },
       orderBy: { name: 'asc' },
     });
   }
 
-  async createCategory(name: string) {
+  async createCategory(name: string, parentId?: number) {
     return this.prisma.productCategory.create({
-      data: { name },
+      data: { name, parentId: parentId ?? null },
+      include: { children: true },
     });
   }
 
@@ -275,6 +278,7 @@ export class CatalogService {
     return this.prisma.productCategory.update({
       where: { id },
       data: { name },
+      include: { children: true },
     });
   }
 

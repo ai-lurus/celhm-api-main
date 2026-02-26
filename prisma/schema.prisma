@@ -205,10 +205,13 @@ model Customer {
 }
 
 model ProductCategory {
-  id        Int      @id @default(autoincrement())
-  name      String   @unique
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id            Int               @id @default(autoincrement())
+  name          String            @unique
+  parentId      Int?
+  parent        ProductCategory?  @relation("CategoryChildren", fields: [parentId], references: [id])
+  children      ProductCategory[] @relation("CategoryChildren")
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
 
   @@map("product_categories")
 }
