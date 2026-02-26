@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { Role } from '@prisma/client';
 import { RegisterUserDto } from './dto/register-user.dto';
@@ -177,6 +177,9 @@ export class AuthService {
     });
 
     if (error) {
+      if (error.message?.toLowerCase().includes('already been registered') || error.message?.toLowerCase().includes('already registered')) {
+        throw new ConflictException('Ya existe un usuario con ese correo');
+      }
       throw new Error(`Failed to create user: ${error.message}`);
     }
 
@@ -209,9 +212,9 @@ export class AuthService {
       throw new Error('Failed to create local user record.');
     }
 
-    // 4. Send credentials email
+    // 4. Send credentials email (non-blocking — user is created regardless)
     const appUrl = this.configService.get<string>('APP_URL');
-    await this.emailProvider.send(
+    this.emailProvider.send(
       email,
       'Tu acceso a CelHM',
       `<p>Hola <strong>${name}</strong>,</p>
@@ -220,7 +223,9 @@ export class AuthService {
        <strong>Contraseña temporal:</strong> ${tempPassword}</p>
        <p><a href="${appUrl}">Ingresar a CelHM</a></p>
        <p>Te recomendamos cambiar tu contraseña después de tu primer inicio de sesión.</p>`,
-    );
+    ).catch((err) => {
+      console.error('Failed to send credentials email:', err.message);
+    });
 
     return {
       id: newUser.id,
