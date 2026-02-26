@@ -11,6 +11,8 @@ import { CreateVariantDto } from './dto/create-variant.dto';
 import { UpdateVariantDto } from './dto/update-variant.dto';
 import { CreateBrandDto } from './dto/create-brand.dto';
 import { UpdateBrandDto } from './dto/update-brand.dto';
+import { CreateCategoryDto } from './dto/create-category.dto';
+import { UpdateCategoryDto } from './dto/update-category.dto';
 
 @ApiTags('catalog')
 @Controller('catalog')
@@ -143,11 +145,38 @@ export class CatalogController {
   }
 
   @Get('categories')
-  @ApiOperation({ summary: 'Get all unique categories' })
-  @ApiResponse({ status: 200, description: 'List of unique categories' })
+  @ApiOperation({ summary: 'Get all categories' })
+  @ApiResponse({ status: 200, description: 'List of categories' })
   @Roles(Role.ADMINISTRADOR, Role.ADMON, Role.RECEPCIONISTA)
   async getCategories() {
     return this.catalogService.getCategories();
+  }
+
+  @Post('categories')
+  @ApiOperation({ summary: 'Create new category' })
+  @ApiResponse({ status: 201, description: 'Category created successfully' })
+  @Roles(Role.ADMINISTRADOR, Role.ADMON)
+  async createCategory(@Body() createCategoryDto: CreateCategoryDto) {
+    return this.catalogService.createCategory(createCategoryDto.name);
+  }
+
+  @Patch('categories/:id')
+  @ApiOperation({ summary: 'Update category' })
+  @ApiResponse({ status: 200, description: 'Category updated successfully' })
+  @Roles(Role.ADMINISTRADOR, Role.ADMON)
+  async updateCategory(
+    @Param('id') id: string,
+    @Body() updateCategoryDto: UpdateCategoryDto,
+  ) {
+    return this.catalogService.updateCategory(parseInt(id, 10), updateCategoryDto.name);
+  }
+
+  @Delete('categories/:id')
+  @ApiOperation({ summary: 'Delete category' })
+  @ApiResponse({ status: 200, description: 'Category deleted successfully' })
+  @Roles(Role.ADMINISTRADOR, Role.ADMON)
+  async deleteCategory(@Param('id') id: string) {
+    return this.catalogService.deleteCategory(parseInt(id, 10));
   }
 
   @Get('brands')

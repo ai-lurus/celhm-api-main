@@ -204,6 +204,15 @@ model Customer {
   @@map("customers")
 }
 
+model ProductCategory {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("product_categories")
+}
+
 model DeviceBrand {
   id        Int           @id @default(autoincrement())
   name      String        @unique

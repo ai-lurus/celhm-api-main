@@ -260,22 +260,28 @@ export class CatalogService {
   }
 
   async getCategories() {
-    const categories = await this.prisma.product.findMany({
-      select: {
-        category: true,
-      },
-      distinct: ['category'],
-      where: {
-        category: {
-          not: null,
-        },
-      },
-      orderBy: {
-        category: 'asc',
-      },
+    return this.prisma.productCategory.findMany({
+      orderBy: { name: 'asc' },
     });
+  }
 
-    return categories.map((c) => c.category).filter(Boolean);
+  async createCategory(name: string) {
+    return this.prisma.productCategory.create({
+      data: { name },
+    });
+  }
+
+  async updateCategory(id: number, name: string) {
+    return this.prisma.productCategory.update({
+      where: { id },
+      data: { name },
+    });
+  }
+
+  async deleteCategory(id: number) {
+    return this.prisma.productCategory.delete({
+      where: { id },
+    });
   }
 
   async getBrands() {
