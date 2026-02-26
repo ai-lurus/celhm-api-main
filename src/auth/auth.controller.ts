@@ -1,7 +1,8 @@
-import { Controller, Get, Post, Body, UseGuards, Request, UnauthorizedException } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Body, UseGuards, Request, UnauthorizedException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { RegisterUserDto } from './dto/register-user.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 
 
@@ -19,6 +20,20 @@ export class AuthController {
   @ApiResponse({ status: 200, description: 'Current user data' })
   async getCurrentUser(@Request() req) {
     return req.user;
+  }
+
+  @Patch('change-password')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Change current user password' })
+  @ApiResponse({ status: 200, description: 'Password changed successfully' })
+  async changePassword(@Request() req, @Body() dto: ChangePasswordDto) {
+    const authUserId = req.user?.authUserId;
+    if (!authUserId) {
+      throw new UnauthorizedException();
+    }
+    await this.authService.changePassword(authUserId, dto.password);
+    return { message: 'Password changed successfully' };
   }
 
   @Post('register')

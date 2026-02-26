@@ -8,6 +8,7 @@ import { EmailProvider } from '../notifications/providers/email.provider';
 
 export interface AuthUser {
   id: number;
+  authUserId: string;
   email: string;
   name: string;
   organizationId: number;
@@ -97,6 +98,7 @@ export class AuthService {
 
       return {
         id: dbUser.id,
+        authUserId: supabaseId,
         email: dbUser.email || '',
         name: dbUser.name || '',
         role: membership.role,
@@ -130,6 +132,7 @@ export class AuthService {
 
       return {
         id: user.id,
+        authUserId: user.authUserId || '',
         email: user.email || '',
         name: user.name || '',
         role: membership.role,
@@ -141,6 +144,20 @@ export class AuthService {
     }
   }
 
+
+  async changePassword(authUserId: string, newPassword: string): Promise<void> {
+    if (!this.supabaseAdmin) {
+      throw new Error('Supabase Admin client not initialized.');
+    }
+
+    const { error } = await this.supabaseAdmin.auth.admin.updateUserById(authUserId, {
+      password: newPassword,
+    });
+
+    if (error) {
+      throw new Error(`Failed to change password: ${error.message}`);
+    }
+  }
 
   async registerUser(dto: RegisterUserDto): Promise<AuthUser> {
     if (!this.supabaseAdmin) {
@@ -207,6 +224,7 @@ export class AuthService {
 
     return {
       id: newUser.id,
+      authUserId: supabaseUser.id,
       email: newUser.email || '',
       name: newUser.name || '',
       role: newUser.memberships[0].role,
