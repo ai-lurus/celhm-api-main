@@ -207,9 +207,12 @@ export class AuthService {
           memberships: { include: { organization: true } },
         },
       });
-    } catch (dbError) {
-      await this.supabaseAdmin.auth.admin.deleteUser(supabaseUser.id);
-      throw new Error('Failed to create local user record.');
+    } catch (dbError: any) {
+      const { error: rollbackError } = await this.supabaseAdmin.auth.admin.deleteUser(supabaseUser.id);
+      if (rollbackError) {
+        console.error('Rollback failed — Supabase user orphaned:', supabaseUser.id, rollbackError.message);
+      }
+      throw new Error(`Failed to create local user record: ${dbError.message}`);
     }
 
     // 4. Send credentials email (non-blocking — user is created regardless)
