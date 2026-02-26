@@ -4,6 +4,7 @@ import { Role } from '@prisma/client';
 import { RegisterUserDto } from './dto/register-user.dto';
 import { ConfigService } from '@nestjs/config';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { EmailProvider } from '../notifications/providers/email.provider';
 
 export interface AuthUser {
   id: number;
@@ -21,6 +22,7 @@ export class AuthService {
   constructor(
     private prisma: PrismaService,
     private configService: ConfigService,
+    private emailProvider: EmailProvider,
   ) {
     const supabaseUrl = this.configService.get<string>('SUPABASE_URL');
     const supabaseServiceKey = this.configService.get<string>('SUPABASE_SERVICE_ROLE_KEY');
@@ -147,12 +149,18 @@ export class AuthService {
 
     const { email, name, organizationId, role, branchId } = dto;
 
-    // 1. Invite user in Supabase
-    const { data, error } = await this.supabaseAdmin.auth.admin.inviteUserByEmail(email);
+    // 1. Generate temporary password
+    const tempPassword = Math.random().toString(36).slice(-8) + Math.random().toString(36).slice(-8).toUpperCase() + '!';
+
+    // 2. Create user in Supabase with confirmed email and temp password
+    const { data, error } = await this.supabaseAdmin.auth.admin.createUser({
+      email,
+      password: tempPassword,
+      email_confirm: true,
+    });
 
     if (error) {
-      console.error('Error inviting user to Supabase:', error);
-      throw new Error(`Failed to invite user: ${error.message}`);
+      throw new Error(`Failed to create user: ${error.message}`);
     }
 
     const supabaseUser = data.user;
@@ -161,45 +169,50 @@ export class AuthService {
       throw new Error('Supabase user creation failed unexpectedly.');
     }
 
-    // 2. Create User in Local DB
+    // 3. Create user in local DB
+    let newUser: any;
     try {
-      const newUser = await this.prisma.user.create({
+      newUser = await this.prisma.user.create({
         data: {
           email: supabaseUser.email,
           authUserId: supabaseUser.id,
-          name: name,
+          name,
           defaultOrganization: { connect: { id: organizationId } },
           branch: branchId ? { connect: { id: branchId } } : undefined,
           memberships: {
-            create: {
-              organizationId: organizationId,
-              role: role
-            }
-          }
+            create: { organizationId, role },
+          },
         },
         include: {
-          memberships: {
-            include: { organization: true }
-          }
-        }
+          memberships: { include: { organization: true } },
+        },
       });
-
-      return {
-        id: newUser.id,
-        email: newUser.email || '',
-        name: newUser.name || '',
-        role: newUser.memberships[0].role,
-        organizationId: newUser.memberships[0].organizationId,
-        branchId: newUser.branchId || undefined
-      };
     } catch (dbError) {
-      // Rollback supabase user if DB fails? 
-      // Ideally yes, but for now we just log/throw. 
-      // Ideally we would delete the supabase user to keep state consistent.
       await this.supabaseAdmin.auth.admin.deleteUser(supabaseUser.id);
-      console.error('Error creating local user, rolled back Supabase user:', dbError);
       throw new Error('Failed to create local user record.');
     }
+
+    // 4. Send credentials email
+    const appUrl = this.configService.get<string>('APP_URL');
+    await this.emailProvider.send(
+      email,
+      'Tu acceso a CelHM',
+      `<p>Hola <strong>${name}</strong>,</p>
+       <p>Tu cuenta ha sido creada. Usa las siguientes credenciales para ingresar:</p>
+       <p><strong>Correo:</strong> ${email}<br/>
+       <strong>Contraseña temporal:</strong> ${tempPassword}</p>
+       <p><a href="${appUrl}">Ingresar a CelHM</a></p>
+       <p>Te recomendamos cambiar tu contraseña después de tu primer inicio de sesión.</p>`,
+    );
+
+    return {
+      id: newUser.id,
+      email: newUser.email || '',
+      name: newUser.name || '',
+      role: newUser.memberships[0].role,
+      organizationId: newUser.memberships[0].organizationId,
+      branchId: newUser.branchId || undefined,
+    };
   }
 }
 

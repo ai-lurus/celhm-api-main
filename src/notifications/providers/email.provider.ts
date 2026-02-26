@@ -1,20 +1,30 @@
 import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { Resend } from 'resend';
 
 @Injectable()
 export class EmailProvider {
+  private resend: Resend;
+  private from: string;
+
+  constructor(private configService: ConfigService) {
+    const apiKey = this.configService.get<string>('RESEND_API_KEY');
+    this.from = this.configService.get<string>('EMAIL_FROM') || 'CelHM <noreply@celhm.com>';
+    this.resend = new Resend(apiKey);
+  }
+
   async send(to: string, subject: string, body: string) {
-    // TODO(ENV): Implement Resend integration
+    const { data, error } = await this.resend.emails.send({
+      from: this.from,
+      to,
+      subject,
+      html: body,
+    });
 
-    // TODO: Implement real Resend integration
-    // const resend = new Resend(process.env.RESEND_API_KEY);
-    // return await resend.emails.send({
-    //   from: 'noreply@celhm.com',
-    //   to,
-    //   subject,
-    //   html: body,
-    // });
+    if (error) {
+      throw new Error(`Resend error: ${error.message}`);
+    }
 
-    throw new Error('Email provider not configured');
+    return data;
   }
 }
-

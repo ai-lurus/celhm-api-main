@@ -13,7 +13,7 @@ import { WhatsappProvider } from './providers/whatsapp.provider';
     SmsProvider,
     WhatsappProvider,
   ],
-  exports: [NotificationsService],
+  exports: [NotificationsService, EmailProvider],
 })
 export class NotificationsModule {}
 
