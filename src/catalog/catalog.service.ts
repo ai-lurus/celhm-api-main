@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, ConflictException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
@@ -267,25 +267,55 @@ export class CatalogService {
     });
   }
 
-  async createCategory(name: string, parentId?: number) {
-    return this.prisma.productCategory.create({
-      data: { name, parentId: parentId ?? null },
-      include: { children: true },
-    });
+  async createCategory(name: string, parentId?: number | null) {
+    try {
+      return await this.prisma.productCategory.create({
+        data: { name, parentId: parentId ?? null },
+        include: { children: true },
+      });
+    } catch (error: any) {
+      if (error?.code === 'P2002') {
+        throw new ConflictException(`Ya existe una categoría con el nombre "${name}"`);
+      }
+      throw error;
+    }
   }
 
-  async updateCategory(id: number, name: string) {
-    return this.prisma.productCategory.update({
-      where: { id },
-      data: { name },
-      include: { children: true },
-    });
+  async updateCategory(id: number, name: string, parentId?: number | null) {
+    try {
+      return await this.prisma.productCategory.update({
+        where: { id },
+        data: {
+          name,
+          ...(parentId !== undefined && { parentId: parentId }),
+        },
+        include: { children: true },
+      });
+    } catch (error: any) {
+      if (error?.code === 'P2002') {
+        throw new ConflictException(`Ya existe una categoría con el nombre "${name}"`);
+      }
+      if (error?.code === 'P2025') {
+        throw new NotFoundException(`Categoría con id ${id} no encontrada`);
+      }
+      throw error;
+    }
   }
 
   async deleteCategory(id: number) {
-    return this.prisma.productCategory.delete({
-      where: { id },
-    });
+    try {
+      return await this.prisma.productCategory.delete({
+        where: { id },
+      });
+    } catch (error: any) {
+      if (error?.code === 'P2025') {
+        throw new NotFoundException(`Categoría con id ${id} no encontrada`);
+      }
+      if (error?.code === 'P2003') {
+        throw new ConflictException('No se puede eliminar la categoría porque tiene subcategorías asignadas');
+      }
+      throw error;
+    }
   }
 
   async getBrands() {
@@ -316,22 +346,49 @@ export class CatalogService {
   }
 
   async createBrand(name: string) {
-    return this.prisma.deviceBrand.create({
-      data: { name },
-    });
+    try {
+      return await this.prisma.deviceBrand.create({
+        data: { name },
+      });
+    } catch (error: any) {
+      if (error?.code === 'P2002') {
+        throw new ConflictException(`Ya existe una marca con el nombre "${name}"`);
+      }
+      throw error;
+    }
   }
 
   async updateBrand(id: number, name: string) {
-    return this.prisma.deviceBrand.update({
-      where: { id },
-      data: { name },
-    });
+    try {
+      return await this.prisma.deviceBrand.update({
+        where: { id },
+        data: { name },
+      });
+    } catch (error: any) {
+      if (error?.code === 'P2002') {
+        throw new ConflictException(`Ya existe una marca con el nombre "${name}"`);
+      }
+      if (error?.code === 'P2025') {
+        throw new NotFoundException(`Marca con id ${id} no encontrada`);
+      }
+      throw error;
+    }
   }
 
   async deleteBrand(id: number) {
-    return this.prisma.deviceBrand.delete({
-      where: { id },
-    });
+    try {
+      return await this.prisma.deviceBrand.delete({
+        where: { id },
+      });
+    } catch (error: any) {
+      if (error?.code === 'P2025') {
+        throw new NotFoundException(`Marca con id ${id} no encontrada`);
+      }
+      if (error?.code === 'P2003') {
+        throw new ConflictException('No se puede eliminar la marca porque tiene registros asociados');
+      }
+      throw error;
+    }
   }
 }
 

@@ -168,7 +168,11 @@ export class CatalogController {
     @Param('id') id: string,
     @Body() updateCategoryDto: UpdateCategoryDto,
   ) {
-    return this.catalogService.updateCategory(parseInt(id, 10), updateCategoryDto.name);
+    return this.catalogService.updateCategory(
+      parseInt(id, 10),
+      updateCategoryDto.name,
+      updateCategoryDto.parentId,
+    );
   }
 
   @Delete('categories/:id')
