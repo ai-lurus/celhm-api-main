@@ -1,14 +1,16 @@
-import { Injectable, UnauthorizedException, ConflictException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, ConflictException, BadRequestException } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { Role } from '@prisma/client';
 import { RegisterUserDto } from './dto/register-user.dto';
+import { LoginDto } from './dto/login.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { ConfigService } from '@nestjs/config';
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { EmailProvider } from '../notifications/providers/email.provider';
+import * as bcrypt from 'bcryptjs';
 
 export interface AuthUser {
   id: number;
-  authUserId: string;
   email: string;
   name: string;
   organizationId: number;
@@ -16,97 +18,100 @@ export interface AuthUser {
   role: Role;
 }
 
+export interface JwtPayload {
+  sub: number;
+  email: string;
+  organizationId: number;
+  role: Role;
+  branchId?: number;
+}
+
 @Injectable()
 export class AuthService {
-  private supabaseAdmin: SupabaseClient;
-
   constructor(
     private prisma: PrismaService,
     private configService: ConfigService,
     private emailProvider: EmailProvider,
-  ) {
-    const supabaseUrl = this.configService.get<string>('SUPABASE_URL');
-    const supabaseServiceKey = this.configService.get<string>('SUPABASE_SERVICE_ROLE_KEY');
+    private jwtService: JwtService,
+  ) {}
 
-    if (supabaseUrl && supabaseServiceKey) {
-      this.supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false
-        }
-      });
+  async login(dto: LoginDto): Promise<{ access_token: string; user: AuthUser; expires_in: string }> {
+    const user = await this.prisma.user.findUnique({
+      where: { email: dto.email },
+      include: {
+        memberships: { take: 1, include: { organization: true } },
+        branch: true,
+      },
+    });
+
+    if (!user || !user.password) {
+      throw new UnauthorizedException('Credenciales inválidas');
     }
+
+    const passwordValid = await bcrypt.compare(dto.password, user.password);
+    if (!passwordValid) {
+      throw new UnauthorizedException('Credenciales inválidas');
+    }
+
+    if (!user.memberships.length) {
+      throw new UnauthorizedException('Usuario sin organización asignada');
+    }
+
+    const membership = user.memberships[0];
+    const expiresIn = this.configService.get<string>('JWT_EXPIRY') || '7d';
+
+    const payload: JwtPayload = {
+      sub: user.id,
+      email: user.email || '',
+      organizationId: membership.organizationId,
+      role: membership.role,
+      branchId: user.branchId || undefined,
+    };
+
+    const authUser: AuthUser = {
+      id: user.id,
+      email: user.email || '',
+      name: user.name || '',
+      role: membership.role,
+      organizationId: membership.organizationId,
+      branchId: user.branchId || undefined,
+    };
+
+    return {
+      access_token: this.jwtService.sign(payload),
+      user: authUser,
+      expires_in: expiresIn,
+    };
   }
 
-
-  async validateSupabaseUser(user: any): Promise<AuthUser | null> {
-    const supabaseId = user.id;
-    const email = user.email;
-
-    if (!supabaseId || !email) {
-      return null;
-    }
-
+  async validateJwtPayload(payload: JwtPayload): Promise<AuthUser | null> {
     try {
-      // 1. Try to find user by authUserId (Supabase ID)
-      let dbUser = await this.prisma.user.findUnique({
-        where: { authUserId: supabaseId },
+      const user = await this.prisma.user.findUnique({
+        where: { id: payload.sub },
         include: {
           memberships: {
-            // We take the first membership if not specified in payload
-            // ideally we'd want organizationId in metadata, but for now take first
-            take: 1,
-            include: { organization: true }
+            where: { organizationId: payload.organizationId },
+            include: { organization: true },
           },
           branch: true,
         },
       });
 
-      // 2. If not found, try to link by email
-      if (!dbUser) {
-        // Find by email to link account
-        const existingUser = await this.prisma.user.findUnique({
-          where: { email },
-        });
-
-        if (existingUser) {
-          // Update authUserId
-          dbUser = await this.prisma.user.update({
-            where: { id: existingUser.id },
-            data: { authUserId: supabaseId },
-            include: {
-              memberships: { take: 1, include: { organization: true } },
-              branch: true,
-            },
-          });
-          console.log(`🔗 Linked Supabase ID ${supabaseId} to user ${email}`);
-        } else {
-          // User doesn't exist in our system. 
-          // Depending on requirements, we could return null or create a user.
-          // For this internal system, we return null (Unauthorized).
-          console.log(`❌ User not found for Supabase ID ${supabaseId} or email ${email}`);
-          return null;
-        }
+      if (!user || !user.memberships.length) {
+        return null;
       }
 
-      if (!dbUser.memberships.length) {
-        console.log(`❌ User ${email} has no memberships`);
-        return null; // Must belong to an organization
-      }
-
-      const membership = dbUser.memberships[0];
+      const membership = user.memberships[0];
 
       return {
-        id: dbUser.id,
-        authUserId: supabaseId,
-        email: dbUser.email || '',
-        name: dbUser.name || '',
+        id: user.id,
+        email: user.email || '',
+        name: user.name || '',
         role: membership.role,
         organizationId: membership.organizationId,
-        branchId: dbUser.branchId || undefined,
+        branchId: user.branchId || undefined,
       };
-    } catch (error) {
-      console.error('Error validating supabase user:', error);
+    } catch {
       return null;
     }
   }
@@ -132,90 +137,63 @@ export class AuthService {
 
       return {
         id: user.id,
-        authUserId: user.authUserId || '',
         email: user.email || '',
         name: user.name || '',
         role: membership.role,
         organizationId: membership.organizationId,
         branchId: user.branchId || undefined,
       };
-    } catch (error) {
+    } catch {
       return null;
     }
   }
 
+  async changePassword(userId: number, dto: ChangePasswordDto): Promise<void> {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
 
-  async changePassword(authUserId: string, newPassword: string): Promise<void> {
-    if (!this.supabaseAdmin) {
-      throw new Error('Supabase Admin client not initialized.');
+    if (!user || !user.password) {
+      throw new UnauthorizedException('Usuario no encontrado');
     }
 
-    const { error } = await this.supabaseAdmin.auth.admin.updateUserById(authUserId, {
-      password: newPassword,
+    const currentValid = await bcrypt.compare(dto.currentPassword, user.password);
+    if (!currentValid) {
+      throw new BadRequestException('La contraseña actual es incorrecta');
+    }
+
+    const hashed = await bcrypt.hash(dto.newPassword, 10);
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { password: hashed },
     });
-
-    if (error) {
-      throw new Error(`Failed to change password: ${error.message}`);
-    }
   }
 
   async registerUser(dto: RegisterUserDto): Promise<AuthUser> {
-    if (!this.supabaseAdmin) {
-      throw new Error('Supabase Admin client not initialized. Check SUPABASE_SERVICE_ROLE_KEY.');
-    }
-
     const { email, name, organizationId, role, branchId } = dto;
 
-    // 1. Generate temporary password
-    const tempPassword = Math.random().toString(36).slice(-8) + Math.random().toString(36).slice(-8).toUpperCase() + '!';
+    const existing = await this.prisma.user.findUnique({ where: { email } });
+    if (existing) {
+      throw new ConflictException('Ya existe un usuario con ese correo');
+    }
 
-    // 2. Create user in Supabase with confirmed email and temp password
-    const { data, error } = await this.supabaseAdmin.auth.admin.createUser({
-      email,
-      password: tempPassword,
-      email_confirm: true,
+    const tempPassword = Math.random().toString(36).slice(-8) + Math.random().toString(36).slice(-8).toUpperCase() + '!';
+    const hashedPassword = await bcrypt.hash(tempPassword, 10);
+
+    const newUser = await this.prisma.user.create({
+      data: {
+        email,
+        password: hashedPassword,
+        name,
+        defaultOrganization: { connect: { id: organizationId } },
+        branch: branchId ? { connect: { id: branchId } } : undefined,
+        memberships: {
+          create: { organizationId, role },
+        },
+      },
+      include: {
+        memberships: { include: { organization: true } },
+      },
     });
 
-    if (error) {
-      if (error.message?.toLowerCase().includes('already been registered') || error.message?.toLowerCase().includes('already registered')) {
-        throw new ConflictException('Ya existe un usuario con ese correo');
-      }
-      throw new Error(`Failed to create user: ${error.message}`);
-    }
-
-    const supabaseUser = data.user;
-
-    if (!supabaseUser) {
-      throw new Error('Supabase user creation failed unexpectedly.');
-    }
-
-    // 3. Create user in local DB
-    let newUser: any;
-    try {
-      newUser = await this.prisma.user.create({
-        data: {
-          email: supabaseUser.email,
-          authUserId: supabaseUser.id,
-          name,
-          defaultOrganization: { connect: { id: organizationId } },
-          branch: branchId ? { connect: { id: branchId } } : undefined,
-          memberships: {
-            create: { organizationId, role },
-          },
-        },
-        include: {
-          memberships: { include: { organization: true } },
-        },
-      });
-    } catch (dbError: any) {
-      const { error: rollbackError } = await this.supabaseAdmin.auth.admin.deleteUser(supabaseUser.id);
-      if (rollbackError) {
-        console.error('Rollback failed — Supabase user orphaned:', supabaseUser.id, rollbackError.message);
-      }
-      throw new Error(`Failed to create local user record: ${dbError.message}`);
-    }
-
-    // 4. Send credentials email (non-blocking — user is created regardless)
     const appUrl = this.configService.get<string>('APP_URL');
     this.emailProvider.send(
       email,
@@ -226,13 +204,12 @@ export class AuthService {
        <strong>Contraseña temporal:</strong> ${tempPassword}</p>
        <p><a href="${appUrl}">Ingresar a CelHM</a></p>
        <p>Te recomendamos cambiar tu contraseña después de tu primer inicio de sesión.</p>`,
-    ).catch((err) => {
+    ).catch((err: Error) => {
       console.error('Failed to send credentials email:', err.message);
     });
 
     return {
       id: newUser.id,
-      authUserId: supabaseUser.id,
       email: newUser.email || '',
       name: newUser.name || '',
       role: newUser.memberships[0].role,
@@ -241,4 +218,3 @@ export class AuthService {
     };
   }
 }
-
