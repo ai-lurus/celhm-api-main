@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
-import { TicketState, PaymentMethod } from '@prisma/client';
+import { TicketState, PaymentMethod, MovementType } from '@prisma/client';
 
 @Injectable()
 export class ReportsService {
@@ -64,20 +64,47 @@ export class ReportsService {
       }
     }
 
+    const totalSales = repairSales + productSales;
+
+    const paymentMethodCounts: Record<PaymentMethod, number> = {
+      EFECTIVO: 0,
+      TARJETA: 0,
+      TRANSFERENCIA: 0,
+      CHEQUE: 0,
+      OTRO: 0,
+    };
+    for (const sale of sales) {
+      for (const payment of sale.payments) {
+        paymentMethodCounts[payment.method]++;
+      }
+    }
+
     return {
       period: {
         startDate: filters.startDate,
         endDate: filters.endDate,
       },
-      totals: {
-        byPaymentMethod,
-        byServiceType: {
-          repairs: repairSales,
-          products: productSales,
-          total: repairSales + productSales,
-        },
-      },
+      totalSales,
       salesCount: sales.length,
+      totalByPaymentMethod: (Object.entries(byPaymentMethod) as [PaymentMethod, number][])
+        .filter(([, amount]) => amount > 0)
+        .map(([method, amount]) => ({
+          method,
+          amount,
+          count: paymentMethodCounts[method],
+        })),
+      totalByServiceType: [
+        {
+          type: 'Reparaciones',
+          amount: repairSales,
+          count: sales.filter((s) => s.ticketId).length,
+        },
+        {
+          type: 'Productos',
+          amount: productSales,
+          count: sales.filter((s) => !s.ticketId).length,
+        },
+      ].filter((item) => item.count > 0),
     };
   }
 
@@ -142,21 +169,102 @@ export class ReportsService {
       (t) => t.state === TicketState.ENTREGADO || t.state === TicketState.CANCELADO,
     );
 
+    const closedRevenue = closedTickets.reduce(
+      (sum, t) => sum + Number((t as any).finalCost || (t as any).estimatedCost || 0),
+      0,
+    );
+
     return {
       period: {
         startDate: filters.startDate,
         endDate: filters.endDate,
       },
-      totals: {
-        byState,
-        total: tickets.length,
-        closed: closedTickets.length,
-        active: tickets.length - closedTickets.length,
+      totalTickets: tickets.length,
+      ticketsByState: (Object.entries(byState) as [TicketState, number][]).map(
+        ([state, count]) => ({ state, count }),
+      ),
+      closedTickets: {
+        count: closedTickets.length,
+        totalRevenue: closedRevenue,
       },
     };
   }
 
   // RF-REP-03: Reporte de inventario
+  // RF-REP-04: Reporte de movimientos de inventario
+  async getMovementsReport(organizationId: number, filters: {
+    branchId?: number;
+    startDate: Date;
+    endDate: Date;
+    type?: MovementType;
+  }) {
+    const where: any = {
+      branch: { organizationId },
+      createdAt: {
+        gte: filters.startDate,
+        lte: filters.endDate,
+      },
+    };
+
+    if (filters.branchId) {
+      where.branchId = filters.branchId;
+    }
+
+    if (filters.type) {
+      where.type = filters.type;
+    }
+
+    const movements = await this.prisma.movement.findMany({
+      where,
+      include: {
+        variant: {
+          include: {
+            product: {
+              select: { id: true, name: true, brand: true, model: true },
+            },
+          },
+        },
+        user: { select: { id: true, name: true } },
+        branch: { select: { id: true, name: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    // Totals by type
+    const byType: Record<string, { count: number; qty: number }> = {};
+    for (const m of movements) {
+      if (!byType[m.type]) byType[m.type] = { count: 0, qty: 0 };
+      byType[m.type].count += 1;
+      byType[m.type].qty += m.qty;
+    }
+
+    return {
+      period: { startDate: filters.startDate, endDate: filters.endDate },
+      total: movements.length,
+      byType: Object.entries(byType).map(([type, data]) => ({ type, ...data })),
+      movements: movements.map((m) => ({
+        id: m.id,
+        folio: m.folio,
+        type: m.type,
+        qty: m.qty,
+        reason: m.reason,
+        createdAt: m.createdAt,
+        variant: {
+          id: m.variant.id,
+          name: m.variant.name,
+          sku: m.variant.sku,
+        },
+        product: {
+          id: m.variant.product.id,
+          name: m.variant.product.name,
+          brand: m.variant.product.brand,
+        },
+        user: m.user ? { id: m.user.id, name: m.user.name } : null,
+        branch: { id: m.branch.id, name: m.branch.name },
+      })),
+    };
+  }
+
   async getInventoryReport(organizationId: number, filters: {
     branchId?: number;
   }) {
@@ -168,29 +276,6 @@ export class ReportsService {
       where.branchId = filters.branchId;
     }
 
-    // Products under minimum stock
-    const lowStockItems = await this.prisma.stock.findMany({
-      where: {
-        ...where,
-        qty: {
-          lte: this.prisma.stock.fields.min,
-        },
-      },
-      include: {
-        variant: {
-          include: {
-            product: true,
-          },
-        },
-        branch: {
-          select: {
-            name: true,
-            code: true,
-          },
-        },
-      },
-    });
-
     // Inventory valuation (using purchase price)
     const allStocks = await this.prisma.stock.findMany({
       where,
@@ -200,8 +285,17 @@ export class ReportsService {
             product: true,
           },
         },
+        branch: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
       },
     });
+
+    // Products under minimum stock (filter in JS since Prisma doesn't support field-to-field comparison)
+    const lowStockItems = allStocks.filter((s) => s.qty <= s.min);
 
     let totalValue = 0;
     for (const stock of allStocks) {
@@ -210,23 +304,24 @@ export class ReportsService {
     }
 
     return {
+      totalValue,
+      totalItems: allStocks.length,
       lowStockItems: lowStockItems.map((item) => ({
         id: item.id,
-        variant: {
-          sku: item.variant.sku,
-          name: item.variant.name,
-          product: item.variant.product.name,
-        },
-        branch: item.branch.name,
+        variantId: item.variantId,
+        branchId: item.branchId,
         qty: item.qty,
         min: item.min,
-        deficit: item.min - item.qty,
+        variant: {
+          id: item.variant.id,
+          name: item.variant.name,
+          sku: item.variant.sku,
+        },
+        branch: {
+          id: item.branch.id,
+          name: item.branch.name,
+        },
       })),
-      valuation: {
-        totalValue,
-        totalItems: allStocks.length,
-        itemsWithStock: allStocks.filter((s) => s.qty > 0).length,
-      },
     };
   }
 }

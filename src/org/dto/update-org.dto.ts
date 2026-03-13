@@ -42,11 +42,6 @@ export class UpdateOrgDto {
     @IsString()
     currency?: string;
 
-    @ApiPropertyOptional({ description: 'Organization timezone' })
-    @IsOptional()
-    @IsString()
-    timezone?: string;
-
     @ApiPropertyOptional({ description: 'Organization VAT rate' })
     @IsOptional()
     @IsNumber()

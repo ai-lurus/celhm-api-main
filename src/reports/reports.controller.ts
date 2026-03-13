@@ -4,7 +4,7 @@ import { ReportsService } from './reports.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthUser } from '../auth/auth.service';
-import { Role, TicketState } from '@prisma/client';
+import { Role, TicketState, MovementType } from '@prisma/client';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 
@@ -54,6 +54,28 @@ export class ReportsController {
       startDate: startDate ? new Date(startDate) : undefined,
       endDate: endDate ? new Date(endDate) : undefined,
       state: state as TicketState,
+    });
+  }
+
+  @Get('movements')
+  @ApiOperation({ summary: 'Get movements report (RF-REP-04)' })
+  @ApiQuery({ name: 'branchId', required: false, type: Number })
+  @ApiQuery({ name: 'startDate', required: true, type: String })
+  @ApiQuery({ name: 'endDate', required: true, type: String })
+  @ApiQuery({ name: 'type', required: false, enum: MovementType })
+  @ApiResponse({ status: 200, description: 'Movements report' })
+  getMovementsReport(
+    @CurrentUser() user: AuthUser,
+    @Query('branchId') branchId?: string,
+    @Query('startDate') startDate: string = new Date().toISOString(),
+    @Query('endDate') endDate: string = new Date().toISOString(),
+    @Query('type') type?: string,
+  ) {
+    return this.reportsService.getMovementsReport(user.organizationId, {
+      branchId: branchId ? parseInt(branchId) : undefined,
+      startDate: new Date(startDate),
+      endDate: new Date(endDate),
+      type: type as MovementType | undefined,
     });
   }
 
