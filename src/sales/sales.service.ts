@@ -68,9 +68,14 @@ export class SalesService {
 
     // If payment is provided, process it
     if (createSaleDto.payment) {
-      await this.processPayment(sale.id, createSaleDto.payment, user, null);
+      const paymentAmount = Number(createSaleDto.payment.amount);
 
-      // Update sale status
+      // Only create payment record if amount > 0 (advance may have already covered the total)
+      if (paymentAmount > 0) {
+        await this.processPayment(sale.id, createSaleDto.payment, user, null);
+      }
+
+      // Mark as paid (either real payment or covered by advance)
       await this.prisma.sale.update({
         where: { id: sale.id },
         data: { status: SaleStatus.PAGADO },

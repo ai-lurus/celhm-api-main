@@ -9,22 +9,30 @@ export class CreateSaleLineDto {
   @IsInt()
   variantId?: number;
 
+  @ApiPropertyOptional({ description: 'Ticket ID for repair order lines' })
+  @IsOptional()
+  @IsInt()
+  ticketId?: number;
+
   @ApiProperty()
   @IsString()
   description: string;
 
   @ApiProperty()
+  @Type(() => Number)
   @IsInt()
   @Min(1)
   qty: number;
 
   @ApiProperty()
+  @Type(() => Number)
   @IsNumber()
   @Min(0)
   unitPrice: number;
 
   @ApiPropertyOptional()
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   @Min(0)
   discount?: number;
@@ -32,6 +40,7 @@ export class CreateSaleLineDto {
 
 export class CreatePaymentDto {
   @ApiProperty()
+  @Type(() => Number)
   @IsNumber()
   @Min(0)
   amount: number;
