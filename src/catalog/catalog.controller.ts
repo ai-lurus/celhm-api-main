@@ -13,6 +13,8 @@ import { CreateBrandDto } from './dto/create-brand.dto';
 import { UpdateBrandDto } from './dto/update-brand.dto';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
+import { CreateDeviceModelDto } from './dto/create-device-model.dto';
+import { UpdateDeviceModelDto } from './dto/update-device-model.dto';
 
 @ApiTags('catalog')
 @Controller('catalog')
@@ -228,5 +230,42 @@ export class CatalogController {
   async deleteBrand(@Param('id') id: string) {
     return this.catalogService.deleteBrand(parseInt(id, 10));
   }
-}
 
+  // ─── Device Models ───────────────────────────────────────────────────────────
+
+  @Get('device-models')
+  @ApiOperation({ summary: 'Get all device models, optionally filtered by brand' })
+  @ApiResponse({ status: 200, description: 'List of device models' })
+  @ApiQuery({ name: 'brandId', required: false, description: 'Filter by brand ID' })
+  @Roles(Role.ADMINISTRADOR, Role.ADMON, Role.RECEPCIONISTA, Role.LABORATORIO)
+  async getDeviceModels(@Query('brandId') brandId?: string) {
+    return this.catalogService.getDeviceModels(brandId ? parseInt(brandId, 10) : undefined);
+  }
+
+  @Post('device-models')
+  @ApiOperation({ summary: 'Create a new device model' })
+  @ApiResponse({ status: 201, description: 'Device model created successfully' })
+  @Roles(Role.ADMINISTRADOR, Role.ADMON)
+  async createDeviceModel(@Body() dto: CreateDeviceModelDto) {
+    return this.catalogService.createDeviceModel(dto);
+  }
+
+  @Patch('device-models/:id')
+  @ApiOperation({ summary: 'Update a device model' })
+  @ApiResponse({ status: 200, description: 'Device model updated successfully' })
+  @Roles(Role.ADMINISTRADOR, Role.ADMON)
+  async updateDeviceModel(
+    @Param('id') id: string,
+    @Body() dto: UpdateDeviceModelDto,
+  ) {
+    return this.catalogService.updateDeviceModel(parseInt(id, 10), dto);
+  }
+
+  @Delete('device-models/:id')
+  @ApiOperation({ summary: 'Delete a device model' })
+  @ApiResponse({ status: 200, description: 'Device model deleted successfully' })
+  @Roles(Role.ADMINISTRADOR, Role.ADMON)
+  async deleteDeviceModel(@Param('id') id: string) {
+    return this.catalogService.deleteDeviceModel(parseInt(id, 10));
+  }
+}

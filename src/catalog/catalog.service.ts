@@ -390,5 +390,69 @@ export class CatalogService {
       throw error;
     }
   }
+
+  // Device Models Management
+
+  async getDeviceModels(brandId?: number) {
+    return this.prisma.deviceModel.findMany({
+      where: brandId ? { brandId } : undefined,
+      include: {
+        brand: { select: { id: true, name: true } },
+      },
+      orderBy: [{ brand: { name: 'asc' } }, { name: 'asc' }],
+    });
+  }
+
+  async createDeviceModel(dto: { brandId: number; name: string; deviceType?: string }) {
+    try {
+      return await this.prisma.deviceModel.create({
+        data: { brandId: dto.brandId, name: dto.name, deviceType: dto.deviceType ?? null },
+        include: { brand: { select: { id: true, name: true } } },
+      });
+    } catch (error: any) {
+      if (error?.code === 'P2002') {
+        throw new ConflictException(`Ya existe un modelo con el nombre "${dto.name}" para esta marca`);
+      }
+      if (error?.code === 'P2025') {
+        throw new NotFoundException(`Marca con id ${dto.brandId} no encontrada`);
+      }
+      throw error;
+    }
+  }
+
+  async updateDeviceModel(id: number, dto: { name?: string; deviceType?: string }) {
+    try {
+      return await this.prisma.deviceModel.update({
+        where: { id },
+        data: {
+          ...(dto.name !== undefined && { name: dto.name }),
+          ...(dto.deviceType !== undefined && { deviceType: dto.deviceType }),
+        },
+        include: { brand: { select: { id: true, name: true } } },
+      });
+    } catch (error: any) {
+      if (error?.code === 'P2002') {
+        throw new ConflictException(`Ya existe un modelo con ese nombre para esta marca`);
+      }
+      if (error?.code === 'P2025') {
+        throw new NotFoundException(`Modelo con id ${id} no encontrado`);
+      }
+      throw error;
+    }
+  }
+
+  async deleteDeviceModel(id: number) {
+    try {
+      return await this.prisma.deviceModel.delete({ where: { id } });
+    } catch (error: any) {
+      if (error?.code === 'P2025') {
+        throw new NotFoundException(`Modelo con id ${id} no encontrado`);
+      }
+      if (error?.code === 'P2003') {
+        throw new ConflictException('No se puede eliminar el modelo porque tiene tickets asociados');
+      }
+      throw error;
+    }
+  }
 }
 
