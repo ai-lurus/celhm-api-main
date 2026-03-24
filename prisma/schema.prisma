@@ -227,13 +227,14 @@ model DeviceBrand {
 }
 
 model DeviceModel {
-  id        Int         @id @default(autoincrement())
-  brandId   Int
-  name      String
-  createdAt DateTime    @default(now())
-  updatedAt DateTime    @updatedAt
-  brand     DeviceBrand @relation(fields: [brandId], references: [id], onDelete: Cascade)
-  tickets   Ticket[]
+  id         Int         @id @default(autoincrement())
+  brandId    Int
+  name       String
+  deviceType String?
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+  brand      DeviceBrand @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  tickets    Ticket[]
 
   @@unique([brandId, name])
   @@map("device_models")
