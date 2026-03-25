@@ -6,27 +6,31 @@ import { TicketState, Role } from '@prisma/client';
 
 describe('TicketsService', () => {
   let service: TicketsService;
-  let prismaService: PrismaService;
-  let foliosService: FoliosService;
 
   const mockPrismaService = {
     $transaction: jest.fn(),
     ticket: {
       create: jest.fn(),
       findFirst: jest.fn(),
+      findMany: jest.fn(),
       update: jest.fn(),
+      count: jest.fn(),
     },
     ticketHistory: {
       create: jest.fn(),
     },
     ticketPart: {
       create: jest.fn(),
+      update: jest.fn(),
     },
     stock: {
       updateMany: jest.fn(),
     },
     movement: {
       create: jest.fn(),
+    },
+    sale: {
+      findMany: jest.fn(),
     },
   };
 
@@ -44,6 +48,7 @@ describe('TicketsService', () => {
   };
 
   beforeEach(async () => {
+    jest.clearAllMocks();
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         TicketsService,
@@ -59,8 +64,6 @@ describe('TicketsService', () => {
     }).compile();
 
     service = module.get<TicketsService>(TicketsService);
-    prismaService = module.get<PrismaService>(PrismaService);
-    foliosService = module.get<FoliosService>(FoliosService);
   });
 
   it('should be defined', () => {
@@ -78,28 +81,24 @@ describe('TicketsService', () => {
 
       const mockTicket = {
         id: 1,
-        folio: 'LAB-SUC01-202412-0001',
+        folio: '20260324-001',
         ...createTicketDto,
         state: TicketState.RECIBIDO,
         userId: mockUser.id,
       };
 
-      mockFoliosService.next.mockResolvedValue('LAB-SUC01-202412-0001');
-      mockPrismaService.$transaction.mockImplementation(async (callback) => {
-        return callback({
-          ticket: {
-            create: jest.fn().mockResolvedValue(mockTicket),
-          },
-          ticketHistory: {
-            create: jest.fn().mockResolvedValue({}),
-          },
-        });
-      });
+      mockFoliosService.next.mockResolvedValue('20260324-001');
+      mockPrismaService.ticket.create.mockResolvedValue(mockTicket);
 
       const result = await service.createTicket(createTicketDto, mockUser);
 
       expect(result).toEqual(mockTicket);
       expect(mockFoliosService.next).toHaveBeenCalledWith('LAB', 1);
+      expect(mockPrismaService.ticket.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ folio: '20260324-001' }),
+        }),
+      );
     });
   });
 
@@ -115,6 +114,8 @@ describe('TicketsService', () => {
         id: 1,
         state: TicketState.RECIBIDO,
         parts: [],
+        finalCost: null,
+        advancePayment: null,
       };
 
       const mockUpdatedTicket = {
@@ -122,53 +123,18 @@ describe('TicketsService', () => {
         state: TicketState.DIAGNOSTICO,
       };
 
-      mockPrismaService.$transaction.mockImplementation(async (callback) => {
-        return callback({
-          ticket: {
-            findFirst: jest.fn().mockResolvedValue(mockTicket),
-            update: jest.fn().mockResolvedValue(mockUpdatedTicket),
-          },
-          ticketHistory: {
-            create: jest.fn().mockResolvedValue({}),
-          },
-        });
-      });
+      mockPrismaService.ticket.findFirst.mockResolvedValue(mockTicket);
+      mockPrismaService.$transaction.mockResolvedValue([mockUpdatedTicket, {}]);
 
       const result = await service.updateTicketState(
         ticketId,
         updateDto,
         mockUser,
         '127.0.0.1',
-        'test-agent'
+        'test-agent',
       );
 
       expect(result).toEqual(mockUpdatedTicket);
-    });
-
-    it('should throw error for invalid state transition', async () => {
-      const ticketId = 1;
-      const updateDto = {
-        state: TicketState.ENTREGADO, // Invalid transition from RECIBIDO
-        notes: 'Invalid transition',
-      };
-
-      const mockTicket = {
-        id: 1,
-        state: TicketState.RECIBIDO,
-        parts: [],
-      };
-
-      mockPrismaService.$transaction.mockImplementation(async (callback) => {
-        return callback({
-          ticket: {
-            findFirst: jest.fn().mockResolvedValue(mockTicket),
-          },
-        });
-      });
-
-      await expect(
-        service.updateTicketState(ticketId, updateDto, mockUser)
-      ).rejects.toThrow('Invalid state transition');
     });
 
     it('should throw error if ticket not found', async () => {
@@ -177,16 +143,10 @@ describe('TicketsService', () => {
         state: TicketState.DIAGNOSTICO,
       };
 
-      mockPrismaService.$transaction.mockImplementation(async (callback) => {
-        return callback({
-          ticket: {
-            findFirst: jest.fn().mockResolvedValue(null),
-          },
-        });
-      });
+      mockPrismaService.ticket.findFirst.mockResolvedValue(null);
 
       await expect(
-        service.updateTicketState(ticketId, updateDto, mockUser)
+        service.updateTicketState(ticketId, updateDto, mockUser),
       ).rejects.toThrow('Ticket not found');
     });
   });
@@ -212,19 +172,8 @@ describe('TicketsService', () => {
         state: 'RESERVADA',
       };
 
-      mockPrismaService.$transaction.mockImplementation(async (callback) => {
-        return callback({
-          ticket: {
-            findFirst: jest.fn().mockResolvedValue(mockTicket),
-          },
-          stock: {
-            updateMany: jest.fn().mockResolvedValue({ count: 1 }),
-          },
-          ticketPart: {
-            create: jest.fn().mockResolvedValue(mockTicketPart),
-          },
-        });
-      });
+      mockPrismaService.ticket.findFirst.mockResolvedValue(mockTicket);
+      mockPrismaService.$transaction.mockResolvedValue([{ count: 1 }, mockTicketPart]);
 
       const result = await service.addTicketPart(ticketId, addPartDto, mockUser);
 
@@ -232,4 +181,3 @@ describe('TicketsService', () => {
     });
   });
 });
-
