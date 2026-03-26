@@ -185,6 +185,8 @@ model Customer {
   branchId       Int?
   name           String
   phone          String
+  phoneAlt       String?
+  rfc            String?
   email          String?
   notes          String?
   isWholesale    Boolean      @default(false)
