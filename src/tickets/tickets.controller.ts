@@ -33,7 +33,7 @@ export class TicketsController {
     type: TicketResponseDto,
     example: {
       id: 1,
-      folio: 'LAB-0001',
+      folio: '26030001',
       branchId: 1,
       customerName: 'Juan Pérez',
       customerPhone: '+52 123 456 7890',

@@ -6,7 +6,8 @@ export class FoliosService {
   constructor(private prisma: PrismaService) {}
 
   async next(prefix: string, branchId: number): Promise<string> {
-    const currentPeriod = new Date().toISOString().slice(0, 10).replace(/-/g, ''); // YYYYMMDD
+    const now = new Date();
+    const currentPeriod = `${String(now.getFullYear()).slice(2)}${String(now.getMonth() + 1).padStart(2, '0')}`; // YYMM
 
     // PgBouncer transaction mode doesn't support interactive transactions
     // Using optimistic locking with retry logic instead
@@ -48,7 +49,7 @@ export class FoliosService {
         });
 
         const newSeq = folioSeq.seq;
-        return `${currentPeriod}-${newSeq.toString().padStart(3, '0')}`;
+        return `${currentPeriod}${newSeq.toString().padStart(4, '0')}`;
       } catch (error: any) {
         // Retry on unique constraint violation or concurrent update
         if (error.code === 'P2002' || error.code === 'P2034') {
@@ -68,7 +69,8 @@ export class FoliosService {
   }
 
   async preview(prefix: string, branchId: number): Promise<string> {
-    const currentPeriod = new Date().toISOString().slice(0, 10).replace(/-/g, ''); // YYYYMMDD
+    const now = new Date();
+    const currentPeriod = `${String(now.getFullYear()).slice(2)}${String(now.getMonth() + 1).padStart(2, '0')}`; // YYMM
 
     const branch = await this.prisma.branch.findUnique({
       where: { id: branchId },
@@ -90,7 +92,7 @@ export class FoliosService {
     });
 
     const nextSeq = folioSeq ? folioSeq.seq + 1 : 1;
-    return `${currentPeriod}-${nextSeq.toString().padStart(3, '0')}`;
+    return `${currentPeriod}${nextSeq.toString().padStart(4, '0')}`;
   }
 }
 

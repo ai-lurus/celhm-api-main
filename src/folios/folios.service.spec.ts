@@ -36,7 +36,8 @@ describe('FoliosService', () => {
 
   describe('next', () => {
     it('should generate first folio for new sequence', async () => {
-      const currentPeriod = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+      const now = new Date();
+      const currentPeriod = `${String(now.getFullYear()).slice(2)}${String(now.getMonth() + 1).padStart(2, '0')}`;
       const mockBranch = { code: 'SUC01' };
 
       mockPrismaService.branch.findUnique.mockResolvedValue(mockBranch);
@@ -44,12 +45,13 @@ describe('FoliosService', () => {
 
       const result = await service.next('LAB', 1);
 
-      expect(result).toBe(`${currentPeriod}-001`);
+      expect(result).toBe(`${currentPeriod}0001`);
       expect(mockPrismaService.folioSequence.upsert).toHaveBeenCalled();
     });
 
     it('should increment existing sequence', async () => {
-      const currentPeriod = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+      const now = new Date();
+      const currentPeriod = `${String(now.getFullYear()).slice(2)}${String(now.getMonth() + 1).padStart(2, '0')}`;
       const mockBranch = { code: 'SUC01' };
 
       mockPrismaService.branch.findUnique.mockResolvedValue(mockBranch);
@@ -57,7 +59,7 @@ describe('FoliosService', () => {
 
       const result = await service.next('LAB', 1);
 
-      expect(result).toBe(`${currentPeriod}-006`);
+      expect(result).toBe(`${currentPeriod}0006`);
     });
 
     it('should throw error if branch not found', async () => {
@@ -69,7 +71,8 @@ describe('FoliosService', () => {
 
   describe('preview', () => {
     it('should preview next folio for new sequence', async () => {
-      const currentPeriod = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+      const now = new Date();
+      const currentPeriod = `${String(now.getFullYear()).slice(2)}${String(now.getMonth() + 1).padStart(2, '0')}`;
       const mockBranch = { code: 'SUC01' };
 
       mockPrismaService.branch.findUnique.mockResolvedValue(mockBranch);
@@ -77,11 +80,12 @@ describe('FoliosService', () => {
 
       const result = await service.preview('LAB', 1);
 
-      expect(result).toBe(`${currentPeriod}-001`);
+      expect(result).toBe(`${currentPeriod}0001`);
     });
 
     it('should preview next folio for existing sequence', async () => {
-      const currentPeriod = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+      const now = new Date();
+      const currentPeriod = `${String(now.getFullYear()).slice(2)}${String(now.getMonth() + 1).padStart(2, '0')}`;
       const mockBranch = { code: 'SUC01' };
       const mockSequence = { seq: 10 };
 
@@ -90,7 +94,7 @@ describe('FoliosService', () => {
 
       const result = await service.preview('LAB', 1);
 
-      expect(result).toBe(`${currentPeriod}-011`);
+      expect(result).toBe(`${currentPeriod}0011`);
     });
   });
 });

@@ -52,7 +52,7 @@ export class TicketResponseDto {
   @ApiProperty({ example: 1 })
   id: number;
 
-  @ApiProperty({ example: 'LAB-0001' })
+  @ApiProperty({ example: '26030001' })
   folio: string;
 
   @ApiProperty({ example: 1 })
