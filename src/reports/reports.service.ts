@@ -42,7 +42,8 @@ export class ReportsService {
     // Group by payment method
     const byPaymentMethod: Record<PaymentMethod, number> = {
       EFECTIVO: 0,
-      TARJETA: 0,
+      TARJETA_DEBITO: 0,
+      TARJETA_CREDITO: 0,
       TRANSFERENCIA: 0,
       CHEQUE: 0,
       OTRO: 0,
@@ -68,7 +69,8 @@ export class ReportsService {
 
     const paymentMethodCounts: Record<PaymentMethod, number> = {
       EFECTIVO: 0,
-      TARJETA: 0,
+      TARJETA_DEBITO: 0,
+      TARJETA_CREDITO: 0,
       TRANSFERENCIA: 0,
       CHEQUE: 0,
       OTRO: 0,

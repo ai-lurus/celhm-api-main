@@ -460,7 +460,8 @@ model CashCut {
   date           DateTime     @db.Date
   initialAmount  Decimal      @default(0) @db.Decimal(10, 2)
   salesCash      Decimal      @default(0) @db.Decimal(10, 2)
-  salesCard      Decimal      @default(0) @db.Decimal(10, 2)
+  salesDebitCard Decimal      @default(0) @db.Decimal(10, 2)
+  salesCreditCard Decimal      @default(0) @db.Decimal(10, 2)
   salesTransfer  Decimal      @default(0) @db.Decimal(10, 2)
   advances       Decimal      @default(0) @db.Decimal(10, 2)
   adjustments    Decimal      @default(0) @db.Decimal(10, 2)
@@ -540,7 +541,8 @@ enum NotificationChannel {
 
 enum PaymentMethod {
   EFECTIVO
-  TARJETA
+  TARJETA_DEBITO
+  TARJETA_CREDITO
   TRANSFERENCIA
   CHEQUE
   OTRO
