@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Patch, Body, Param, Query, UseGuards, Req } from '@nestjs/common';
+import { Controller, Post, Get, Patch, Delete, Body, Param, Query, UseGuards, Req } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -162,8 +162,34 @@ export class TicketsController {
     @Param('id') id: string,
     @Body() addTicketPartDto: AddTicketPartDto,
     @CurrentUser() user: AuthUser,
+    @Req() req: any,
   ) {
-    return this.ticketsService.addTicketPart(parseInt(id), addTicketPartDto, user);
+    const ip = req.ip || req.connection.remoteAddress;
+    const userAgent = req.get('User-Agent');
+    return this.ticketsService.addTicketPart(parseInt(id), addTicketPartDto, user, ip, userAgent);
+  }
+
+  @Delete(':id/piezas/:partId')
+  @ApiOperation({
+    summary: 'Remove part from ticket',
+    description: 'Removes a part (variant) from the ticket and restores it to stock.'
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Part removed from ticket successfully',
+  })
+  @ApiResponse({ status: 404, description: 'Ticket or part not found' })
+
+  @Roles(Role.ADMINISTRADOR, Role.ADMON, Role.LABORATORIO)
+  async removeTicketPart(
+    @Param('id') id: string,
+    @Param('partId') partId: string,
+    @CurrentUser() user: AuthUser,
+    @Req() req: any,
+  ) {
+    const ip = req.ip || req.connection.remoteAddress;
+    const userAgent = req.get('User-Agent');
+    return this.ticketsService.removeTicketPart(parseInt(id), parseInt(partId), user, ip, userAgent);
   }
 }
 

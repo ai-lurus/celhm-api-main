@@ -381,15 +381,15 @@ export class TicketsService {
 
     // Handle state-specific logic (outside transaction - these are idempotent operations)
     if (updateTicketStateDto.state === TicketState.EN_REPARACION) {
-      await this.consumeReservedPartsWithoutTx(ticket.parts, user, ip, userAgent);
+      await this.consumeReservedPartsWithoutTx(ticket.parts);
     } else if (updateTicketStateDto.state === TicketState.CANCELADO) {
-      await this.releaseReservedPartsWithoutTx(ticket.parts);
+      await this.releaseReservedPartsWithoutTx(ticket.parts, user, ip, userAgent);
     }
 
     return updatedTicket;
   }
 
-  async addTicketPart(id: number, addTicketPartDto: AddTicketPartDto, user: AuthUser) {
+  async addTicketPart(id: number, addTicketPartDto: AddTicketPartDto, user: AuthUser, ip?: string, userAgent?: string) {
     // PgBouncer transaction mode: Read first, then batch transaction
     const ticket = await this.prisma.ticket.findFirst({
       where: {
@@ -402,7 +402,7 @@ export class TicketsService {
       throw new Error('Ticket not found');
     }
 
-    // Use batch transaction for atomic stock reservation and part creation
+    // Use batch transaction for atomic stock reservation, part creation and movement
     const [, ticketPart] = await this.prisma.$transaction([
       this.prisma.stock.updateMany({
         where: {
@@ -410,6 +410,9 @@ export class TicketsService {
           variantId: addTicketPartDto.variantId,
         },
         data: {
+          qty: {
+            decrement: addTicketPartDto.qty,
+          },
           reserved: {
             increment: addTicketPartDto.qty,
           },
@@ -423,51 +426,96 @@ export class TicketsService {
           state: TicketPartState.RESERVADA,
         },
       }),
+      this.prisma.movement.create({
+        data: {
+          branchId: ticket.branchId,
+          variantId: addTicketPartDto.variantId,
+          type: MovementType.EGR,
+          qty: addTicketPartDto.qty,
+          reason: `Adición a ticket ${ticket.folio}`,
+          ticketId: id,
+          userId: user.id,
+          ip,
+          userAgent,
+        },
+      }),
     ]);
 
     return ticketPart;
   }
 
-  // PgBouncer compatible: No transaction context needed
-  private async consumeReservedPartsWithoutTx(parts: any[], user: AuthUser, ip?: string, userAgent?: string) {
-    if (parts.length === 0) return;
-
-    // Get ticket info for movements (parts include ticketId but not full ticket)
-    const ticketIds = [...new Set(parts.map(p => p.ticketId))];
-    const tickets = await this.prisma.ticket.findMany({
-      where: { id: { in: ticketIds } },
-      select: { id: true, folio: true, branchId: true },
+  async removeTicketPart(id: number, partId: number, user: AuthUser, ip?: string, userAgent?: string) {
+    // Read part and ticket first
+    const ticketPart = await this.prisma.ticketPart.findFirst({
+      where: {
+        id: partId,
+        ticketId: id,
+        ticket: {
+          branch: { organizationId: user.organizationId },
+        },
+      },
+      include: {
+        ticket: true,
+      },
     });
-    const ticketMap = new Map(tickets.map(t => [t.id, t]));
+
+    if (!ticketPart) {
+      throw new Error('Ticket part not found');
+    }
+
+    // Use batch transaction for atomic stock restoration, part deletion and movement
+    await this.prisma.$transaction([
+      this.prisma.stock.updateMany({
+        where: {
+          branchId: ticketPart.ticket.branchId,
+          variantId: ticketPart.variantId,
+        },
+        data: {
+          qty: {
+            increment: ticketPart.qty,
+          },
+          reserved: {
+            decrement: ticketPart.qty,
+          },
+        },
+      }),
+      this.prisma.ticketPart.delete({
+        where: { id: partId },
+      }),
+      this.prisma.movement.create({
+        data: {
+          branchId: ticketPart.ticket.branchId,
+          variantId: ticketPart.variantId,
+          type: MovementType.ING,
+          qty: ticketPart.qty,
+          reason: `Remoción de ticket ${ticketPart.ticket.folio}`,
+          ticketId: id,
+          userId: user.id,
+          ip,
+          userAgent,
+        },
+      }),
+    ]);
+
+    return { success: true };
+  }
+
+  // PgBouncer compatible: No transaction context needed
+  private async consumeReservedPartsWithoutTx(parts: any[]) {
+    if (parts.length === 0) return;
 
     // Process each part with batch transaction
     for (const part of parts) {
       if (part.state === TicketPartState.RESERVADA) {
-        const ticket = ticketMap.get(part.ticketId);
-        if (!ticket) continue;
-
         // Use batch transaction for atomic part consumption
+        // Qty was already decremented on addTicketPart, so we just clear reserved
         await this.prisma.$transaction([
-          this.prisma.movement.create({
-            data: {
-              branchId: ticket.branchId,
-              variantId: part.variantId,
-              type: MovementType.EGR,
-              qty: part.qty,
-              reason: `Consumo por ticket ${ticket.folio}`,
-              ticketId: part.ticketId,
-              userId: user.id,
-              ip,
-              userAgent,
-            },
-          }),
           this.prisma.stock.updateMany({
             where: {
-              branchId: ticket.branchId,
+              branchId: part.ticket.branchId,
               variantId: part.variantId,
             },
             data: {
-              qty: { decrement: part.qty },
               reserved: { decrement: part.qty },
             },
           }),
@@ -481,37 +529,41 @@ export class TicketsService {
   }
 
   // PgBouncer compatible: No transaction context needed
-  private async releaseReservedPartsWithoutTx(parts: any[]) {
+  private async releaseReservedPartsWithoutTx(parts: any[], user: AuthUser, ip?: string, userAgent?: string) {
     if (parts.length === 0) return;
-
-    // Get ticket info for branchId
-    const ticketIds = [...new Set(parts.map(p => p.ticketId))];
-    const tickets = await this.prisma.ticket.findMany({
-      where: { id: { in: ticketIds } },
-      select: { id: true, branchId: true },
-    });
-    const ticketMap = new Map(tickets.map(t => [t.id, t]));
 
     // Process each part with batch transaction
     for (const part of parts) {
       if (part.state === TicketPartState.RESERVADA) {
-        const ticket = ticketMap.get(part.ticketId);
-        if (!ticket) continue;
-
         // Use batch transaction for atomic part release
+        // Increment qty to restore it, and clear reserved
         await this.prisma.$transaction([
           this.prisma.stock.updateMany({
             where: {
-              branchId: ticket.branchId,
+              branchId: part.ticket.branchId,
               variantId: part.variantId,
             },
             data: {
+              qty: { increment: part.qty },
               reserved: { decrement: part.qty },
             },
           }),
           this.prisma.ticketPart.update({
             where: { id: part.id },
             data: { state: TicketPartState.LIBERADA },
+          }),
+          this.prisma.movement.create({
+            data: {
+              branchId: part.ticket.branchId,
+              variantId: part.variantId,
+              type: MovementType.ING,
+              qty: part.qty,
+              reason: `Restauración por cancelación de ticket ${part.ticket.folio}`,
+              ticketId: part.ticketId,
+              userId: user.id,
+              ip,
+              userAgent,
+            },
           }),
         ]);
       }
