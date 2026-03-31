@@ -66,13 +66,20 @@ export class SalesService {
       },
     });
 
-    // If payment is provided, process it
-    if (createSaleDto.payment) {
-      const paymentAmount = Number(createSaleDto.payment.amount);
+    // If payments are provided, process them
+    if (createSaleDto.payments && createSaleDto.payments.length > 0) {
+      let totalPaymentAmount = 0;
+      let totalEfectivoAmount = 0;
 
-      // Only create payment record if amount > 0 (advance may have already covered the total)
-      if (paymentAmount > 0) {
-        await this.processPayment(sale.id, createSaleDto.payment, user, null);
+      for (const payment of createSaleDto.payments) {
+        const paymentAmount = Number(payment.amount);
+        if (paymentAmount > 0) {
+          totalPaymentAmount += paymentAmount;
+          await this.processPayment(sale.id, payment, user, null);
+          if (payment.method === PaymentMethod.EFECTIVO) {
+            totalEfectivoAmount += paymentAmount;
+          }
+        }
       }
 
       // Mark as paid (either real payment or covered by advance)
@@ -82,12 +89,12 @@ export class SalesService {
       });
 
       // If sale is for a ticket, update ticket advance payment
-      if (createSaleDto.ticketId && createSaleDto.payment.method === PaymentMethod.EFECTIVO) {
+      if (createSaleDto.ticketId && totalEfectivoAmount > 0) {
         await this.prisma.ticket.update({
           where: { id: createSaleDto.ticketId },
           data: {
             advancePayment: {
-              increment: createSaleDto.payment.amount,
+              increment: totalEfectivoAmount,
             },
           },
         });
@@ -124,7 +131,7 @@ export class SalesService {
     }
 
     // Update CashCut if cashRegisterId is present
-    if (createSaleDto.cashRegisterId && createSaleDto.payment) {
+    if (createSaleDto.cashRegisterId && createSaleDto.payments && createSaleDto.payments.length > 0) {
       // Find today's cash cut for this register
       const today = new Date();
       // Set to start of day in local time or UTC? Assuming DB stores dates as UTC dates or similar.
@@ -151,8 +158,10 @@ export class SalesService {
       // I will add the logic to update these fields.
 
       try {
-        const paymentMethod = createSaleDto.payment.method;
-        const amount = createSaleDto.payment.amount;
+        // For multiple payments, we might need a different handling,
+        // but since we are not fully implementing CashCut here right now, we keep the signature for future use.
+        // const paymentMethod = createSaleDto.payment.method;
+        // const amount = createSaleDto.payment.amount;
 
         // We need to find the cut for today.
         // Since `date` is @db.Date, we need a Date object representing today (ignoring time) 

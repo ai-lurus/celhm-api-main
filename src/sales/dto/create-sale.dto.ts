@@ -86,10 +86,11 @@ export class CreateSaleDto {
   @Min(0)
   discount?: number;
 
-  @ApiPropertyOptional({ description: 'Initial payment if provided' })
+  @ApiPropertyOptional({ description: 'Initial payments if provided', type: [CreatePaymentDto] })
   @IsOptional()
-  @ValidateNested()
+  @IsArray()
+  @ValidateNested({ each: true })
   @Type(() => CreatePaymentDto)
-  payment?: CreatePaymentDto;
+  payments?: CreatePaymentDto[];
 }
 
