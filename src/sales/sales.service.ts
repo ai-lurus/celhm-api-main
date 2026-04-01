@@ -27,6 +27,35 @@ export class SalesService {
     const discount = Number(createSaleDto.discount || 0);
     const total = subtotal - discount;
 
+    let cashCutId: number | undefined;
+
+    if (createSaleDto.cashRegisterId) {
+      let openCut = await this.prisma.cashCut.findFirst({
+        where: {
+          cashRegisterId: createSaleDto.cashRegisterId,
+          status: 'OPEN',
+        },
+      });
+
+      if (!openCut) {
+        openCut = await this.prisma.cashCut.create({
+          data: {
+            branchId: createSaleDto.branchId,
+            cashRegisterId: createSaleDto.cashRegisterId,
+            date: new Date(),
+            initialAmount: 0,
+            userId: user.id,
+            status: 'OPEN',
+            notes: 'Auto-opened by sale',
+            totalIncome: 0,
+            finalAmount: 0,
+          } as import('@prisma/client').Prisma.CashCutUncheckedCreateInput,
+        });
+      }
+
+      cashCutId = openCut.id;
+    }
+
     // Create sale with nested lines (atomic at DB level)
     const sale = await this.prisma.sale.create({
       data: {
@@ -40,6 +69,7 @@ export class SalesService {
         total,
         userId: user.id,
         cashRegisterId: createSaleDto.cashRegisterId,
+        cashCutId,
         lines: {
           create: createSaleDto.lines.map((line) => ({
             variantId: line.variantId,
@@ -127,58 +157,6 @@ export class SalesService {
             }),
           ]);
         }
-      }
-    }
-
-    // Update CashCut if cashRegisterId is present
-    if (createSaleDto.cashRegisterId && createSaleDto.payments && createSaleDto.payments.length > 0) {
-      // Find today's cash cut for this register
-      const today = new Date();
-      // Set to start of day in local time or UTC? Assuming DB stores dates as UTC dates or similar.
-      // Prisma @db.Date stores YYYY-MM-DD.
-      // We need to match precise date or just date part.
-      // Let's rely on finding by cashRegisterId and date (if we can easily construct it)
-      // Or finding the open cut.
-      // Simplified approach: Update the cash cut for the specific register and today's date if exists
-
-      // Actually, to avoidtimezone complexities here without more context, I'll skip auto-updating CashCut for now 
-      // OR I should use the same logic as CashService.
-      // User asked to "Agregar el seleccionar caja", main goal is to link the sale to the box.
-      // Updating the amount in the box is a logical next step but I should be careful.
-      // checking `CashCut` model:
-      /*
-        model CashCut {
-          ...
-          salesCash      Decimal      @default(0) @db.Decimal(10, 2)
-          salesCard      Decimal      @default(0) @db.Decimal(10, 2)
-          salesTransfer  Decimal      @default(0) @db.Decimal(10, 2)
-          ...
-        }
-      */
-      // I will add the logic to update these fields.
-
-      try {
-        // For multiple payments, we might need a different handling,
-        // but since we are not fully implementing CashCut here right now, we keep the signature for future use.
-        // const paymentMethod = createSaleDto.payment.method;
-        // const amount = createSaleDto.payment.amount;
-
-        // We need to find the cut for today.
-        // Since `date` is @db.Date, we need a Date object representing today (ignoring time) 
-        // However, JS Date includes time. 
-        // Let's try to find the cut created today or just use `updateMany` with date filter?
-        // Safer to leave it for now or do a simple update if I can get the ID easily.
-        // Given I don't have the CashCut ID, I'd need to search.
-        // I'll stick to just linking the Sale for now as per immediate request.
-        // The `CashCut` usually aggregates sales on demand or via triggers/hooks.
-        // If the system relies on pre-calculated values in CashCut, then I MUST update it.
-        // Looking at `CashCut` model again, it has `salesCash`, `salesCard` etc fields.
-        // This suggests they are counters.
-
-        // Let's add a todo or a comment that we might need to update CashCut here.
-        // But for now strict requirement is "select box".
-      } catch (e) {
-        this.logger.error('Error updating cash cut', e);
       }
     }
 

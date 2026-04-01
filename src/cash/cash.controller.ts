@@ -3,6 +3,7 @@ import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@ne
 import { CashService } from './cash.service';
 import { CreateCashCutDto } from './dto/create-cash-cut.dto';
 import { CreateCashRegisterDto } from './dto/create-cash-register.dto';
+import { OpenCashCutDto } from './dto/open-cash-cut.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthUser } from '../auth/auth.service';
@@ -35,10 +36,17 @@ export class CashController {
   }
 
   @Post('cuts')
-  @ApiOperation({ summary: 'Create a daily cash cut' })
-  @ApiResponse({ status: 201, description: 'Cash cut created successfully' })
+  @ApiOperation({ summary: 'Create a daily cash cut (Close Register)' })
+  @ApiResponse({ status: 201, description: 'Cash cut closed successfully' })
   createCashCut(@Body() createCashCutDto: CreateCashCutDto, @CurrentUser() user: AuthUser) {
     return this.cashService.createCashCut(createCashCutDto, user);
+  }
+
+  @Post('open')
+  @ApiOperation({ summary: 'Open a cash register session' })
+  @ApiResponse({ status: 201, description: 'Cash register opened successfully' })
+  openCashSession(@Body() openCashCutDto: OpenCashCutDto, @CurrentUser() user: AuthUser) {
+    return this.cashService.openCashSession(openCashCutDto, user);
   }
 
   @Get('cuts')

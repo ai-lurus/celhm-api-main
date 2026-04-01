@@ -2,7 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { AuthUser } from '../auth/auth.service';
 import { CreateCashCutDto } from './dto/create-cash-cut.dto';
-import { PaymentMethod, SaleStatus } from '@prisma/client';
+import { OpenCashCutDto } from './dto/open-cash-cut.dto';
+import { PaymentMethod, SaleStatus, CashCutStatus, Prisma } from '@prisma/client';
 
 @Injectable()
 export class CashService {
@@ -42,31 +43,60 @@ export class CashService {
     });
   }
 
-  async createCashCut(createCashCutDto: CreateCashCutDto, user: AuthUser) {
-    // PgBouncer transaction mode: Read data first, then create (no interactive transaction)
-    // Get date range for the day
-    const date = new Date(createCashCutDto.date);
-    const startOfDay = new Date(date);
-    startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date(date);
-    endOfDay.setHours(23, 59, 59, 999);
+  async openCashSession(dto: OpenCashCutDto, user: AuthUser) {
+    const existingOpen = await this.prisma.cashCut.findFirst({
+      where: {
+        cashRegisterId: dto.cashRegisterId,
+        status: CashCutStatus.OPEN,
+      },
+    });
 
-    // Get sales for the day
+    if (existingOpen) {
+      throw new Error('This register already has an open session. Please close it first.');
+    }
+
+    return this.prisma.cashCut.create({
+      data: {
+        branchId: dto.branchId,
+        cashRegisterId: dto.cashRegisterId,
+        date: new Date(dto.date),
+        initialAmount: dto.initialAmount,
+        userId: user.id,
+        status: CashCutStatus.OPEN,
+        notes: dto.notes,
+        totalIncome: 0,
+        finalAmount: 0,
+      } as Prisma.CashCutUncheckedCreateInput,
+      include: {
+        user: { select: { name: true, email: true } },
+        cashRegister: true,
+        branch: { select: { name: true, code: true } },
+      },
+    });
+  }
+
+  async createCashCut(createCashCutDto: CreateCashCutDto, user: AuthUser) {
+    const openSession = await this.prisma.cashCut.findFirst({
+      where: {
+        cashRegisterId: createCashCutDto.cashRegisterId,
+        status: CashCutStatus.OPEN,
+      },
+    });
+
+    if (!openSession) {
+      throw new Error('There is no open session for this cash register.');
+    }
+
     const sales = await this.prisma.sale.findMany({
       where: {
-        branchId: createCashCutDto.branchId,
-        cashRegisterId: createCashCutDto.cashRegisterId, // Filter by cash register
-        createdAt: {
-          gte: startOfDay,
-          lte: endOfDay,
-        },
+        cashCutId: openSession.id,
         status: SaleStatus.PAGADO,
       },
       include: {
         payments: true,
       },
     });
-    // Calculate totals by payment method
+
     let salesCash = 0;
     let salesDebitCard = 0;
     let salesCreditCard = 0;
@@ -79,7 +109,6 @@ export class CashService {
         switch (payment.method) {
           case PaymentMethod.EFECTIVO:
             salesCash += amount;
-            // If sale is for a ticket, count as advance
             if (sale.ticketId) {
               advances += amount;
             }
@@ -97,70 +126,38 @@ export class CashService {
       }
     }
 
-    // Get initial amount from last cut or provided
-    const lastCut = await this.prisma.cashCut.findFirst({
-      where: {
-        cashRegisterId: createCashCutDto.cashRegisterId,
-        date: {
-          lt: date,
-        },
-      },
-      orderBy: { date: 'desc' },
-    });
+    const initialAmount = Number(openSession.initialAmount);
 
-    const initialAmount = createCashCutDto.initialAmount || (lastCut ? Number(lastCut.finalAmount) : 0);
-    const adjustments = Number(createCashCutDto.adjustments || 0);
+    // Total income from all payment methods (auto-calculated from sales)
+    const totalIncome = salesCash + salesDebitCard + salesCreditCard + salesTransfer;
 
-    // Fixed double counting: totalIncome should only include each payment once
-    const realTotalIncome = salesCash + salesDebitCard + salesCreditCard + salesTransfer + adjustments;
+    // Expected cash = initial fund + all cash sales
+    const expectedAmount = initialAmount + salesCash;
 
-    // Expected Cash in Drawer
-    // We assume the cut is about CASH.
-    // Card and Transfer don't stay in the drawer.
-    const expectedAmount = initialAmount + salesCash + adjustments;
+    // Only the physical cash count is declared by the user
     const declaredAmount = Number(createCashCutDto.declaredAmount);
     const difference = declaredAmount - expectedAmount;
-    const finalAmount = declaredAmount; // The next day starts with what's actually there.
+    const finalAmount = declaredAmount;
 
-    // Create or update cash cut (single operation - no transaction needed)
-    return this.prisma.cashCut.upsert({
-      where: {
-        cashRegisterId_date: {
-          cashRegisterId: createCashCutDto.cashRegisterId,
-          date,
-        },
-      },
-      update: {
-        initialAmount,
+    return this.prisma.cashCut.update({
+      where: { id: openSession.id },
+      data: {
+        status: CashCutStatus.CLOSED,
+        closedAt: new Date(),
         salesCash,
         salesDebitCard,
         salesCreditCard,
         salesTransfer,
-        advances, // Keep recording it for info
-        adjustments,
+        advances,
+        adjustments: 0,
         declaredAmount,
+        // Card/transfer declared = system calculated (no manual input)
+        declaredDebitCard: salesDebitCard,
+        declaredCreditCard: salesCreditCard,
+        declaredTransfer: salesTransfer,
         expectedAmount,
         difference,
-        totalIncome: realTotalIncome,
-        finalAmount,
-        notes: createCashCutDto.notes,
-        userId: user.id,
-      },
-      create: {
-        cashRegisterId: createCashCutDto.cashRegisterId,
-        branchId: createCashCutDto.branchId,
-        date,
-        initialAmount,
-        salesCash,
-        salesDebitCard,
-        salesCreditCard,
-        salesTransfer,
-        advances, // Keep recording it for info
-        adjustments,
-        declaredAmount,
-        expectedAmount,
-        difference,
-        totalIncome: realTotalIncome,
+        totalIncome,
         finalAmount,
         notes: createCashCutDto.notes,
         userId: user.id,
@@ -231,7 +228,7 @@ export class CashService {
             },
           },
         },
-        orderBy: { date: 'desc' },
+        orderBy: [{ date: 'desc' }, { id: 'desc' }],
         skip,
         take: pageSize,
       }),
@@ -269,6 +266,15 @@ export class CashService {
             code: true,
           },
         },
+        sales: {
+          include: {
+            payments: true,
+            customer: true,
+            lines: {
+               include: { variant: { include: { product: true } } }
+            }
+          }
+        }
       },
     });
   }

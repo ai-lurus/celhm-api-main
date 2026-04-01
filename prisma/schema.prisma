@@ -394,12 +394,15 @@ model Sale {
   user       User?      @relation(fields: [userId], references: [id])
   cashRegister CashRegister? @relation(fields: [cashRegisterId], references: [id])
   cashRegisterId Int?
+  cashCutId  Int?
+  cashCut    CashCut?   @relation(fields: [cashCutId], references: [id])
 
   @@index([branchId, createdAt])
   @@index([folio])
   @@index([ticketId])
   @@index([customerId])
   @@index([deletedAt])
+  @@index([cashCutId])
   @@map("sales")
 }
 
@@ -458,6 +461,9 @@ model CashCut {
   cashRegisterId Int
   branchId       Int
   date           DateTime     @db.Date
+  openedAt       DateTime     @default(now())
+  closedAt       DateTime?
+  status         CashCutStatus @default(CLOSED)
   initialAmount  Decimal      @default(0) @db.Decimal(10, 2)
   salesCash      Decimal      @default(0) @db.Decimal(10, 2)
   salesDebitCard Decimal      @default(0) @db.Decimal(10, 2)
@@ -466,6 +472,9 @@ model CashCut {
   advances       Decimal      @default(0) @db.Decimal(10, 2)
   adjustments    Decimal      @default(0) @db.Decimal(10, 2)
   declaredAmount Decimal      @default(0) @db.Decimal(10, 2)
+  declaredDebitCard Decimal?  @default(0) @db.Decimal(10, 2)
+  declaredCreditCard Decimal? @default(0) @db.Decimal(10, 2)
+  declaredTransfer Decimal?   @default(0) @db.Decimal(10, 2)
   expectedAmount Decimal      @default(0) @db.Decimal(10, 2)
   difference     Decimal      @default(0) @db.Decimal(10, 2)
   totalIncome    Decimal      @db.Decimal(10, 2)
@@ -477,8 +486,8 @@ model CashCut {
   branch         Branch       @relation(fields: [branchId], references: [id], onDelete: Cascade)
   cashRegister   CashRegister @relation(fields: [cashRegisterId], references: [id], onDelete: Cascade)
   user           User?        @relation(fields: [userId], references: [id])
+  sales          Sale[]
 
-  @@unique([cashRegisterId, date])
   @@index([branchId, date])
   @@map("cash_cuts")
 }
@@ -552,5 +561,10 @@ enum SaleStatus {
   PENDIENTE
   PAGADO
   CANCELADO
+}
+
+enum CashCutStatus {
+  OPEN
+  CLOSED
 }
 

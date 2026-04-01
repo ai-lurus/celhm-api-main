@@ -1,7 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsInt, IsOptional, IsString, IsNumber, IsDateString } from 'class-validator';
 
-export class CreateCashCutDto {
+export class OpenCashCutDto {
   @ApiProperty()
   @IsInt()
   cashRegisterId: number;
@@ -10,13 +10,13 @@ export class CreateCashCutDto {
   @IsInt()
   branchId: number;
 
-  @ApiProperty({ description: 'Date of the cash cut (YYYY-MM-DD)' })
+  @ApiProperty({ description: 'Date of the opening (YYYY-MM-DD)' })
   @IsDateString()
   date: string;
 
-  @ApiProperty({ description: 'Declared cash amount counted by the user' })
+  @ApiProperty({ description: 'Initial amount' })
   @IsNumber()
-  declaredAmount: number;
+  initialAmount: number;
 
   @ApiPropertyOptional()
   @IsOptional()
