@@ -398,6 +398,11 @@ export class StockService {
       throw new Error('Stock item not found');
     }
 
+    // Resolve frontend aliases → canonical field names
+    const resolvedQty = dto.qty ?? dto.initial_stock;
+    const resolvedMin = dto.min ?? dto.min_stock;
+    const resolvedMax = dto.max ?? dto.max_stock;
+
     // Use batch transaction for atomic updates
     const [updatedProduct, updatedVariant, updatedStock] = await this.prisma.$transaction([
       this.prisma.product.update({
@@ -414,14 +419,17 @@ export class StockService {
           sku: dto.sku ?? stock.variant.sku,
           name: dto.name ?? stock.variant.name,
           price: dto.price ?? stock.variant.price,
+          ...(dto.purchasePrice !== undefined && {
+            purchasePrice: dto.purchasePrice,
+          }),
         },
       }),
       this.prisma.stock.update({
         where: { id: stock.id },
         data: {
-          qty: dto.qty ?? stock.qty,
-          min: dto.min ?? stock.min,
-          max: dto.max ?? stock.max,
+          qty: resolvedQty ?? stock.qty,
+          min: resolvedMin ?? stock.min,
+          max: resolvedMax ?? stock.max,
         },
       }),
     ]);

@@ -31,8 +31,14 @@ export class MovementsService {
 
     // Use batch transaction for movement and stock update
     if (createMovementDto.type === MovementType.ING) {
-      // Increase stock - use batch transaction
-      const [movement] = await this.prisma.$transaction([
+      // Calculate unit cost if totalCost is provided
+      const unitCost =
+        createMovementDto.totalCost != null && createMovementDto.qty > 0
+          ? createMovementDto.totalCost / createMovementDto.qty
+          : null;
+
+      // Build batch operations: movement + stock upsert + optional purchasePrice update
+      const batchOps: any[] = [
         this.prisma.movement.create({
           data: movementData,
         }),
@@ -57,7 +63,19 @@ export class MovementsService {
             reserved: 0,
           },
         }),
-      ]);
+      ];
+
+      // If unitCost calculated, update the variant's purchasePrice
+      if (unitCost !== null) {
+        batchOps.push(
+          this.prisma.variant.update({
+            where: { id: createMovementDto.variantId },
+            data: { purchasePrice: unitCost },
+          }),
+        );
+      }
+
+      const [movement] = await this.prisma.$transaction(batchOps);
       return movement;
     } else if (createMovementDto.type === MovementType.EGR || createMovementDto.type === MovementType.VTA) {
       // Decrease stock - read first to validate
@@ -219,4 +237,3 @@ export class MovementsService {
     }
   }
 }
-

@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEnum, IsInt, IsOptional, IsString, Min } from 'class-validator';
+import { IsDecimal, IsEnum, IsInt, IsNumber, IsOptional, IsString, Min } from 'class-validator';
 import { MovementType } from '@prisma/client';
 
 // Define enum values explicitly for runtime
@@ -30,6 +30,12 @@ export class CreateMovementDto {
   @Min(1)
   qty: number;
 
+  @ApiProperty({ required: false, description: 'Costo total de la entrada (solo para tipo ING)' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  totalCost?: number;
+
   @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
@@ -45,4 +51,3 @@ export class CreateMovementDto {
   @IsInt()
   ticketId?: number;
 }
-

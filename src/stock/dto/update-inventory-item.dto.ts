@@ -22,17 +22,30 @@ export class UpdateInventoryItemDto {
   @IsString()
   sku?: string;
 
-  @ApiPropertyOptional({ description: 'Unit price' })
+  @ApiPropertyOptional({ description: 'Unit sale price' })
   @IsOptional()
   @IsNumber()
   @Min(0)
   price?: number;
 
-  @ApiPropertyOptional({ description: 'Current stock quantity' })
+  @ApiPropertyOptional({ description: 'Unit purchase/cost price' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  purchasePrice?: number;
+
+  @ApiPropertyOptional({ description: 'Current stock quantity (alias: initial_stock)' })
   @IsOptional()
   @IsInt()
   @Min(0)
   qty?: number;
+
+  /** Alias used by frontend – maps to qty */
+  @ApiPropertyOptional({ description: 'Stock quantity (frontend alias for qty)' })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  initial_stock?: number;
 
   @ApiPropertyOptional({ description: 'Minimum stock threshold' })
   @IsOptional()
@@ -40,11 +53,23 @@ export class UpdateInventoryItemDto {
   @Min(0)
   min?: number;
 
+  /** Alias used by frontend – maps to min */
+  @ApiPropertyOptional({ description: 'Min stock (frontend alias for min)' })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  min_stock?: number;
+
   @ApiPropertyOptional({ description: 'Maximum stock threshold' })
   @IsOptional()
   @IsInt()
   @Min(0)
   max?: number;
+
+  /** Alias used by frontend – maps to max */
+  @ApiPropertyOptional({ description: 'Max stock (frontend alias for max)' })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  max_stock?: number;
 }
-
-

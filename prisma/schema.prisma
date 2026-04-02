@@ -162,6 +162,7 @@ model Movement {
   variantId Int
   type      MovementType
   qty       Int
+  totalCost Decimal?     @db.Decimal(10, 2)
   reason    String?
   folio     String?
   ticketId  Int?
