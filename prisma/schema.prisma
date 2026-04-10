@@ -185,10 +185,10 @@ model Customer {
   organizationId Int
   branchId       Int?
   name           String
+  lastName       String       @default("")
   phone          String
-  phoneAlt       String?
-  rfc            String?
   email          String?
+  rfc            String?
   notes          String?
   isWholesale    Boolean      @default(false)
   isCorporate    Boolean      @default(false)
@@ -233,7 +233,7 @@ model DeviceModel {
   id         Int         @id @default(autoincrement())
   brandId    Int
   name       String
-  deviceType String?
+
   createdAt  DateTime    @default(now())
   updatedAt  DateTime    @updatedAt
   brand      DeviceBrand @relation(fields: [brandId], references: [id], onDelete: Cascade)
@@ -374,33 +374,33 @@ model Notification {
 }
 
 model Sale {
-  id               Int        @id @default(autoincrement())
-  branchId         Int
-  folio            String     @unique
-  customerId       Int?
-  ticketId         Int?
-  status           SaleStatus @default(PENDIENTE)
-  subtotal         Decimal    @db.Decimal(10, 2)
-  discount         Decimal    @default(0) @db.Decimal(10, 2)
-  total            Decimal    @db.Decimal(10, 2)
-  userId           Int?
-  createdAt        DateTime   @default(now())
-  updatedAt        DateTime   @updatedAt
-  deletedAt        DateTime?
-  isReturn         Boolean    @default(false)
-  returnOfSaleId   Int?
-  payments         Payment[]
-  lines            SaleLine[]
-  branch           Branch     @relation(fields: [branchId], references: [id], onDelete: Cascade)
-  customer         Customer?  @relation(fields: [customerId], references: [id])
-  ticket           Ticket?    @relation(fields: [ticketId], references: [id])
-  user             User?      @relation(fields: [userId], references: [id])
-  cashRegister     CashRegister? @relation(fields: [cashRegisterId], references: [id])
-  cashRegisterId   Int?
-  cashCutId        Int?
-  cashCut          CashCut?   @relation(fields: [cashCutId], references: [id])
-  returnOf         Sale?      @relation("SaleReturns", fields: [returnOfSaleId], references: [id])
-  returns          Sale[]     @relation("SaleReturns")
+  id             Int            @id @default(autoincrement())
+  branchId       Int
+  folio          String         @unique
+  customerId     Int?
+  ticketId       Int?
+  status         SaleStatus     @default(PENDIENTE)
+  subtotal       Decimal        @db.Decimal(10, 2)
+  discount       Decimal        @default(0) @db.Decimal(10, 2)
+  total          Decimal        @db.Decimal(10, 2)
+  userId         Int?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  deletedAt      DateTime?
+  cashRegisterId Int?
+  cashCutId      Int?
+  isReturn       Boolean        @default(false)
+  returnOfSaleId Int?
+  payments       Payment[]
+  lines          SaleLine[]
+  branch         Branch         @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  customer       Customer?      @relation(fields: [customerId], references: [id])
+  ticket         Ticket?        @relation(fields: [ticketId], references: [id])
+  user           User?          @relation(fields: [userId], references: [id])
+  cashRegister   CashRegister?  @relation(fields: [cashRegisterId], references: [id])
+  cashCut        CashCut?       @relation(fields: [cashCutId], references: [id], onDelete: SetNull)
+  returnOfSale   Sale?          @relation("SaleReturns", fields: [returnOfSaleId], references: [id], onDelete: SetNull)
+  returns        Sale[]         @relation("SaleReturns")
 
   @@index([branchId, createdAt])
   @@index([folio])
@@ -463,36 +463,36 @@ model CashRegister {
 }
 
 model CashCut {
-  id             Int          @id @default(autoincrement())
-  cashRegisterId Int
-  branchId       Int
-  date           DateTime     @db.Date
-  openedAt       DateTime     @default(now())
-  closedAt       DateTime?
-  status         CashCutStatus @default(CLOSED)
-  initialAmount  Decimal      @default(0) @db.Decimal(10, 2)
-  salesCash      Decimal      @default(0) @db.Decimal(10, 2)
-  salesDebitCard Decimal      @default(0) @db.Decimal(10, 2)
-  salesCreditCard Decimal      @default(0) @db.Decimal(10, 2)
-  salesTransfer  Decimal      @default(0) @db.Decimal(10, 2)
-  advances       Decimal      @default(0) @db.Decimal(10, 2)
-  adjustments    Decimal      @default(0) @db.Decimal(10, 2)
-  declaredAmount Decimal      @default(0) @db.Decimal(10, 2)
-  declaredDebitCard Decimal?  @default(0) @db.Decimal(10, 2)
-  declaredCreditCard Decimal? @default(0) @db.Decimal(10, 2)
-  declaredTransfer Decimal?   @default(0) @db.Decimal(10, 2)
-  expectedAmount Decimal      @default(0) @db.Decimal(10, 2)
-  difference     Decimal      @default(0) @db.Decimal(10, 2)
-  totalIncome    Decimal      @db.Decimal(10, 2)
-  finalAmount    Decimal      @db.Decimal(10, 2)
-  notes          String?
-  userId         Int?
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
-  branch         Branch       @relation(fields: [branchId], references: [id], onDelete: Cascade)
-  cashRegister   CashRegister @relation(fields: [cashRegisterId], references: [id], onDelete: Cascade)
-  user           User?        @relation(fields: [userId], references: [id])
-  sales          Sale[]
+  id                 Int           @id @default(autoincrement())
+  cashRegisterId     Int
+  branchId           Int
+  date               DateTime      @db.Date
+  status             CashCutStatus @default(CLOSED)
+  openedAt           DateTime      @default(now())
+  closedAt           DateTime?
+  initialAmount      Decimal       @default(0) @db.Decimal(10, 2)
+  salesCash          Decimal       @default(0) @db.Decimal(10, 2)
+  salesCreditCard    Decimal       @default(0) @db.Decimal(10, 2)
+  salesDebitCard     Decimal       @default(0) @db.Decimal(10, 2)
+  salesTransfer      Decimal       @default(0) @db.Decimal(10, 2)
+  advances           Decimal       @default(0) @db.Decimal(10, 2)
+  adjustments        Decimal       @default(0) @db.Decimal(10, 2)
+  declaredAmount     Decimal       @default(0) @db.Decimal(10, 2)
+  declaredCreditCard Decimal?      @default(0) @db.Decimal(10, 2)
+  declaredDebitCard  Decimal?      @default(0) @db.Decimal(10, 2)
+  declaredTransfer   Decimal?      @default(0) @db.Decimal(10, 2)
+  expectedAmount     Decimal       @default(0) @db.Decimal(10, 2)
+  difference         Decimal       @default(0) @db.Decimal(10, 2)
+  totalIncome        Decimal       @db.Decimal(10, 2)
+  finalAmount        Decimal       @db.Decimal(10, 2)
+  notes              String?
+  userId             Int?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  branch             Branch        @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  cashRegister       CashRegister  @relation(fields: [cashRegisterId], references: [id], onDelete: Cascade)
+  user               User?         @relation(fields: [userId], references: [id])
+  sales              Sale[]
 
   @@index([branchId, date])
   @@map("cash_cuts")
@@ -564,14 +564,14 @@ enum PaymentMethod {
   OTRO
 }
 
+enum CashCutStatus {
+  OPEN
+  CLOSED
+}
+
 enum SaleStatus {
   PENDIENTE
   PAGADO
   CANCELADO
-}
-
-enum CashCutStatus {
-  OPEN
-  CLOSED
 }
 
