@@ -102,14 +102,16 @@ export class CashService {
     let salesCreditCard = 0;
     let salesTransfer = 0;
     let advances = 0;
+    let totalReturns = 0;
 
     for (const sale of sales) {
       for (const payment of sale.payments) {
+        // amount is negative for return payments, positive for normal sales
         const amount = Number(payment.amount);
         switch (payment.method) {
           case PaymentMethod.EFECTIVO:
-            salesCash += amount;
-            if (sale.ticketId) {
+            salesCash += amount; // subtracts if return (negative amount)
+            if (sale.ticketId && !sale.isReturn) {
               advances += amount;
             }
             break;
@@ -122,6 +124,9 @@ export class CashService {
           case PaymentMethod.TRANSFERENCIA:
             salesTransfer += amount;
             break;
+        }
+        if (sale.isReturn) {
+          totalReturns += amount; // already negative, accumulates for reference
         }
       }
     }

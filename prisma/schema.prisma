@@ -374,29 +374,33 @@ model Notification {
 }
 
 model Sale {
-  id         Int        @id @default(autoincrement())
-  branchId   Int
-  folio      String     @unique
-  customerId Int?
-  ticketId   Int?
-  status     SaleStatus @default(PENDIENTE)
-  subtotal   Decimal    @db.Decimal(10, 2)
-  discount   Decimal    @default(0) @db.Decimal(10, 2)
-  total      Decimal    @db.Decimal(10, 2)
-  userId     Int?
-  createdAt  DateTime   @default(now())
-  updatedAt  DateTime   @updatedAt
-  deletedAt  DateTime?
-  payments   Payment[]
-  lines      SaleLine[]
-  branch     Branch     @relation(fields: [branchId], references: [id], onDelete: Cascade)
-  customer   Customer?  @relation(fields: [customerId], references: [id])
-  ticket     Ticket?    @relation(fields: [ticketId], references: [id])
-  user       User?      @relation(fields: [userId], references: [id])
-  cashRegister CashRegister? @relation(fields: [cashRegisterId], references: [id])
-  cashRegisterId Int?
-  cashCutId  Int?
-  cashCut    CashCut?   @relation(fields: [cashCutId], references: [id])
+  id               Int        @id @default(autoincrement())
+  branchId         Int
+  folio            String     @unique
+  customerId       Int?
+  ticketId         Int?
+  status           SaleStatus @default(PENDIENTE)
+  subtotal         Decimal    @db.Decimal(10, 2)
+  discount         Decimal    @default(0) @db.Decimal(10, 2)
+  total            Decimal    @db.Decimal(10, 2)
+  userId           Int?
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+  deletedAt        DateTime?
+  isReturn         Boolean    @default(false)
+  returnOfSaleId   Int?
+  payments         Payment[]
+  lines            SaleLine[]
+  branch           Branch     @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  customer         Customer?  @relation(fields: [customerId], references: [id])
+  ticket           Ticket?    @relation(fields: [ticketId], references: [id])
+  user             User?      @relation(fields: [userId], references: [id])
+  cashRegister     CashRegister? @relation(fields: [cashRegisterId], references: [id])
+  cashRegisterId   Int?
+  cashCutId        Int?
+  cashCut          CashCut?   @relation(fields: [cashCutId], references: [id])
+  returnOf         Sale?      @relation("SaleReturns", fields: [returnOfSaleId], references: [id])
+  returns          Sale[]     @relation("SaleReturns")
 
   @@index([branchId, createdAt])
   @@index([folio])
@@ -404,6 +408,7 @@ model Sale {
   @@index([customerId])
   @@index([deletedAt])
   @@index([cashCutId])
+  @@index([returnOfSaleId])
   @@map("sales")
 }
 
@@ -535,6 +540,7 @@ enum MovementType {
   AJU
   TRF_OUT
   TRF_IN
+  DEV
 }
 
 enum TicketPartState {

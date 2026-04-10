@@ -3,6 +3,7 @@ import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@ne
 import { SalesService } from './sales.service';
 import { CreateSaleDto } from './dto/create-sale.dto';
 import { AddPaymentDto } from './dto/add-payment.dto';
+import { CreateReturnDto } from './dto/create-return.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -76,5 +77,15 @@ export class SalesController {
   ) {
     return this.salesService.addPayment(parseInt(id), addPaymentDto, user);
   }
-}
 
+  @Post(':id/return')
+  @ApiOperation({ summary: 'Create a return for a paid sale' })
+  @ApiResponse({ status: 201, description: 'Return created as a negative sale' })
+  createReturn(
+    @Param('id') id: string,
+    @Body() createReturnDto: CreateReturnDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.salesService.createReturn(parseInt(id), createReturnDto, user);
+  }
+}

@@ -1,8 +1,9 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { FoliosService } from '../folios/folios.service';
 import { AuthUser } from '../auth/auth.service';
 import { CreateSaleDto } from './dto/create-sale.dto';
+import { CreateReturnDto } from './dto/create-return.dto';
 import { PaymentMethod, SaleStatus, MovementType } from '@prisma/client';
 
 @Injectable()
@@ -392,5 +393,157 @@ export class SalesService {
         userId: user.id,
       },
     });
+  }
+
+  async createReturn(originalSaleId: number, dto: CreateReturnDto, user: AuthUser) {
+    // 1. Find and validate the original sale
+    const originalSale = await this.prisma.sale.findFirst({
+      where: {
+        id: originalSaleId,
+        branch: { organizationId: user.organizationId },
+      },
+      include: {
+        lines: {
+          include: {
+            variant: { include: { product: true } },
+          },
+        },
+        payments: true,
+      },
+    });
+
+    if (!originalSale) {
+      throw new NotFoundException('Venta original no encontrada');
+    }
+
+    if (originalSale.status !== SaleStatus.PAGADO) {
+      throw new BadRequestException('Solo se pueden hacer devoluciones de ventas pagadas');
+    }
+
+    if (originalSale.isReturn) {
+      throw new BadRequestException('No se puede hacer una devolución de una devolución');
+    }
+
+    // 2. Validate return lines against original sale lines
+    const returnLinesData: Array<{
+      variantId?: number;
+      description: string;
+      qty: number;
+      unitPrice: number;
+      lineTotal: number;
+    }> = [];
+
+    for (const returnLine of dto.lines) {
+      const originalLine = originalSale.lines.find((l) => l.id === returnLine.saleLineId);
+      if (!originalLine) {
+        throw new BadRequestException(`Línea de venta ${returnLine.saleLineId} no encontrada en la venta original`);
+      }
+      if (returnLine.qty > originalLine.qty) {
+        throw new BadRequestException(
+          `La cantidad a devolver (${returnLine.qty}) no puede ser mayor a la cantidad comprada (${originalLine.qty}) para "${originalLine.description}"`,
+        );
+      }
+      returnLinesData.push({
+        variantId: originalLine.variantId ?? undefined,
+        description: originalLine.description,
+        qty: returnLine.qty,
+        unitPrice: Number(originalLine.unitPrice),
+        lineTotal: Number(originalLine.unitPrice) * returnLine.qty,
+      });
+    }
+
+    // 3. Calculate negative totals
+    const subtotal = -returnLinesData.reduce((sum, l) => sum + l.lineTotal, 0);
+    const total = subtotal; // no discount applied on returns
+
+    // 4. Generate DEV folio
+    const folio = await this.foliosService.next('DEV', originalSale.branchId);
+
+    // 5. Find or auto-open a cash cut for this register
+    let cashCutId: number | undefined;
+    let openCut = await this.prisma.cashCut.findFirst({
+      where: { cashRegisterId: dto.cashRegisterId, status: 'OPEN' },
+    });
+    if (!openCut) {
+      openCut = await this.prisma.cashCut.create({
+        data: {
+          branchId: originalSale.branchId,
+          cashRegisterId: dto.cashRegisterId,
+          date: new Date(),
+          initialAmount: 0,
+          userId: user.id,
+          status: 'OPEN',
+          notes: 'Auto-opened by return',
+          totalIncome: 0,
+          finalAmount: 0,
+        } as import('@prisma/client').Prisma.CashCutUncheckedCreateInput,
+      });
+    }
+    cashCutId = openCut.id;
+
+    // 6. Create the return sale (negative amounts)
+    const returnSale = await this.prisma.sale.create({
+      data: {
+        branchId: originalSale.branchId,
+        folio,
+        customerId: originalSale.customerId,
+        status: SaleStatus.PAGADO,
+        subtotal,
+        discount: 0,
+        total,
+        userId: user.id,
+        cashRegisterId: dto.cashRegisterId,
+        cashCutId,
+        isReturn: true,
+        returnOfSaleId: originalSaleId,
+        lines: {
+          create: returnLinesData.map((l) => ({
+            variantId: l.variantId,
+            description: l.description,
+            qty: l.qty,
+            unitPrice: -l.unitPrice,          // negative unit price
+            discount: 0,
+            total: -l.lineTotal,              // negative total
+          })),
+        },
+      },
+      include: { lines: true },
+    });
+
+    // 7. Create the refund payment (negative amount = money out)
+    await this.prisma.payment.create({
+      data: {
+        saleId: returnSale.id,
+        amount: total,   // already negative
+        method: dto.refundMethod,
+        reference: `Devolución de ${originalSale.folio}`,
+        userId: user.id,
+      },
+    });
+
+    // 8. Restore stock for variant lines
+    for (const line of returnLinesData) {
+      if (line.variantId) {
+        await this.prisma.$transaction([
+          this.prisma.movement.create({
+            data: {
+              branchId: originalSale.branchId,
+              variantId: line.variantId,
+              type: MovementType.DEV,
+              qty: line.qty,
+              reason: `Devolución ${folio} — venta original ${originalSale.folio}`,
+              folio,
+              userId: user.id,
+            },
+          }),
+          this.prisma.stock.updateMany({
+            where: { branchId: originalSale.branchId, variantId: line.variantId },
+            data: { qty: { increment: line.qty } },
+          }),
+        ]);
+      }
+    }
+
+    return this.findOne(returnSale.id, user.organizationId);
   }
 }
