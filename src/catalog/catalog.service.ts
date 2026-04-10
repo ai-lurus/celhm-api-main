@@ -403,10 +403,10 @@ export class CatalogService {
     });
   }
 
-  async createDeviceModel(dto: { brandId: number; name: string; deviceType?: string }) {
+  async createDeviceModel(dto: { brandId: number; name: string }) {
     try {
       return await this.prisma.deviceModel.create({
-        data: { brandId: dto.brandId, name: dto.name, deviceType: dto.deviceType ?? null },
+        data: { brandId: dto.brandId, name: dto.name },
         include: { brand: { select: { id: true, name: true } } },
       });
     } catch (error: any) {
@@ -420,13 +420,12 @@ export class CatalogService {
     }
   }
 
-  async updateDeviceModel(id: number, dto: { name?: string; deviceType?: string }) {
+  async updateDeviceModel(id: number, dto: { name?: string }) {
     try {
       return await this.prisma.deviceModel.update({
         where: { id },
         data: {
           ...(dto.name !== undefined && { name: dto.name }),
-          ...(dto.deviceType !== undefined && { deviceType: dto.deviceType }),
         },
         include: { brand: { select: { id: true, name: true } } },
       });

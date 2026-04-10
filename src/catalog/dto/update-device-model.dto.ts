@@ -7,9 +7,4 @@ export class UpdateDeviceModelDto {
   @IsNotEmpty()
   @IsOptional()
   name?: string;
-
-  @ApiPropertyOptional({ description: 'Device type', example: 'Teléfono', enum: ['Teléfono', 'Tablet', 'Laptop', 'Smartwatch', 'Otro'] })
-  @IsString()
-  @IsOptional()
-  deviceType?: string;
 }
