@@ -1,5 +1,5 @@
-import { IsString, IsNotEmpty, IsInt } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import { IsString, IsNotEmpty, IsInt, IsOptional } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 
 export class CreateDeviceModelDto {
@@ -12,4 +12,9 @@ export class CreateDeviceModelDto {
   @IsString()
   @IsNotEmpty()
   name: string;
+
+  @ApiPropertyOptional({ description: 'Device type (e.g. Smartphone, Laptop)', example: 'Smartphone' })
+  @IsOptional()
+  @IsString()
+  deviceType?: string;
 }

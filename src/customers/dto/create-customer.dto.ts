@@ -10,6 +10,11 @@ export class CreateCustomerDto {
   @IsString()
   phone: string;
 
+  @ApiPropertyOptional({ description: 'Alternative phone number' })
+  @IsOptional()
+  @IsString()
+  phoneAlt?: string;
+
   @ApiPropertyOptional({ description: 'RFC (tax ID)' })
   @IsOptional()
   @IsString()

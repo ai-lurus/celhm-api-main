@@ -15,5 +15,5 @@ END $$;
 -- CreateIndex (idempotent)
 CREATE INDEX IF NOT EXISTS "sales_returnOfSaleId_idx" ON "sales"("returnOfSaleId");
 
--- Drop deviceType from device_models if exists (not in target schema)
-ALTER TABLE "device_models" DROP COLUMN IF EXISTS "deviceType";
+-- Add deviceType to device_models if not exists
+ALTER TABLE "device_models" ADD COLUMN IF NOT EXISTS "deviceType" TEXT;

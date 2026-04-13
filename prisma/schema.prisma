@@ -190,6 +190,7 @@ model Customer {
   name           String
   lastName       String       @default("")
   phone          String
+  phoneAlt       String?
   email          String?
   rfc            String?
   notes          String?
@@ -236,6 +237,7 @@ model DeviceModel {
   id         Int         @id @default(autoincrement())
   brandId    Int
   name       String
+  deviceType String?
 
   createdAt  DateTime    @default(now())
   updatedAt  DateTime    @updatedAt
@@ -582,11 +584,6 @@ enum SaleStatus {
   CANCELADO
 }
 
-enum CashCutStatus {
-  OPEN
-  CLOSED
-}
-
 enum CommissionStatus {
   PENDIENTE
   PAGADA
@@ -616,4 +613,3 @@ model Commission {
   @@index([status])
   @@map("commissions")
 }
-

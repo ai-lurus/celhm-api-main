@@ -30,5 +30,5 @@ BEGIN
   END IF;
 END $$;
 
--- Drop phoneAlt if exists (not in target schema)
-ALTER TABLE "customers" DROP COLUMN IF EXISTS "phoneAlt";
+-- Add phoneAlt if not exists
+ALTER TABLE "customers" ADD COLUMN IF NOT EXISTS "phoneAlt" TEXT;
