@@ -1,6 +1,7 @@
 import { Injectable, Logger, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { FoliosService } from '../folios/folios.service';
+import { CommissionsService } from '../commissions/commissions.service';
 import { AuthUser } from '../auth/auth.service';
 import { CreateSaleDto } from './dto/create-sale.dto';
 import { CreateReturnDto } from './dto/create-return.dto';
@@ -13,6 +14,7 @@ export class SalesService {
   constructor(
     private prisma: PrismaService,
     private foliosService: FoliosService,
+    private commissionsService: CommissionsService,
   ) { }
 
   async create(createSaleDto: CreateSaleDto, user: AuthUser) {
@@ -129,6 +131,20 @@ export class SalesService {
             },
           },
         });
+      }
+
+      // Auto-create commission if the sale is for a ticket
+      if (createSaleDto.ticketId) {
+        try {
+          await this.commissionsService.createCommissionForSale(
+            sale.id,
+            createSaleDto.ticketId,
+            subtotal,
+          );
+        } catch (error) {
+          this.logger.error('Error creating commission:', error);
+          // Don't fail the sale if commission creation fails
+        }
       }
 
       // If variant is provided, create stock movements and update stock

@@ -107,5 +107,10 @@ export class CreateTicketDto {
   @IsOptional()
   @IsString()
   internalNotes?: string;
+
+  @ApiProperty({ required: false, description: 'Usuario de laboratorio asignado' })
+  @IsOptional()
+  @IsNumber()
+  assignedUserId?: number;
 }
 

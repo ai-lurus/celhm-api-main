@@ -67,8 +67,15 @@ export class OrgService {
     }
 
     await this.prisma.$transaction(async (tx) => {
+      const membershipUpdate: any = {};
       if (data.role !== undefined) {
-        await tx.orgMembership.update({ where: { id: memberId }, data: { role: data.role } });
+        membershipUpdate.role = data.role;
+      }
+      if ('commissionRate' in data) {
+        membershipUpdate.commissionRate = data.commissionRate ?? null;
+      }
+      if (Object.keys(membershipUpdate).length > 0) {
+        await tx.orgMembership.update({ where: { id: memberId }, data: membershipUpdate });
       }
       if ('branchId' in data) {
         await tx.user.update({ where: { id: membership.userId }, data: { branchId: data.branchId ?? null } });

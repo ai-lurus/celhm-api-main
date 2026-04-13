@@ -39,6 +39,7 @@ model OrgMembership {
   organizationId Int
   userId         Int
   role           Role
+  commissionRate Decimal?     @db.Decimal(5, 2)
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -59,12 +60,14 @@ model User {
   updatedAt             DateTime        @updatedAt
   password              String?
   cashCuts              CashCut[]
+  commissions           Commission[]
   movements             Movement[]
   memberships           OrgMembership[]
   payments              Payment[]
   sales                 Sale[]
   ticketHistory         TicketHistory[]
-  tickets               Ticket[]
+  tickets               Ticket[]        @relation("TicketCreator")
+  assignedTickets       Ticket[]        @relation("TicketAssignedUser")
   branch                Branch?         @relation(fields: [branchId], references: [id])
   defaultOrganization   Organization?   @relation("DefaultOrganization", fields: [defaultOrganizationId], references: [id])
 
@@ -274,6 +277,7 @@ model Ticket {
   risk           String?
   deletedAt      DateTime?
   deviceId       Int?
+  commissions    Commission[]
   movements      Movement[]
   sales          Sale[]
   history        TicketHistory[]
@@ -281,7 +285,9 @@ model Ticket {
   branch         Branch          @relation(fields: [branchId], references: [id], onDelete: Cascade)
   customer       Customer?       @relation(fields: [customerId], references: [id])
   deviceModel    DeviceModel?    @relation(fields: [deviceId], references: [id])
-  user           User?           @relation(fields: [userId], references: [id])
+  user           User?           @relation("TicketCreator", fields: [userId], references: [id])
+  assignedUserId Int?
+  assignedUser   User?           @relation("TicketAssignedUser", fields: [assignedUserId], references: [id])
 
   @@index([branchId, state])
   @@index([folio])
@@ -391,6 +397,7 @@ model Sale {
   cashCutId      Int?
   isReturn       Boolean        @default(false)
   returnOfSaleId Int?
+  commissions      Commission[]
   payments       Payment[]
   lines          SaleLine[]
   branch         Branch         @relation(fields: [branchId], references: [id], onDelete: Cascade)
@@ -573,5 +580,40 @@ enum SaleStatus {
   PENDIENTE
   PAGADO
   CANCELADO
+}
+
+enum CashCutStatus {
+  OPEN
+  CLOSED
+}
+
+enum CommissionStatus {
+  PENDIENTE
+  PAGADA
+  CANCELADA
+}
+
+model Commission {
+  id          Int              @id @default(autoincrement())
+  saleId      Int
+  ticketId    Int
+  userId      Int
+  amount      Decimal          @db.Decimal(10, 2)
+  rate        Decimal          @db.Decimal(5, 2)
+  saleTotal   Decimal          @db.Decimal(10, 2)
+  status      CommissionStatus @default(PENDIENTE)
+  paidAt      DateTime?
+  notes       String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  sale        Sale             @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  ticket      Ticket           @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([saleId, userId])
+  @@index([userId, createdAt])
+  @@index([status])
+  @@map("commissions")
 }
 

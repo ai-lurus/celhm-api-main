@@ -117,6 +117,12 @@ export class TicketsService {
               email: true,
             },
           },
+          assignedUser: {
+            select: {
+              name: true,
+              email: true,
+            },
+          },
           branch: {
             select: {
               id: true,
@@ -196,6 +202,12 @@ export class TicketsService {
               email: true,
             },
           },
+          assignedUser: {
+            select: {
+              name: true,
+              email: true,
+            },
+          },
         },
         orderBy: { createdAt: 'desc' },
         skip,
@@ -254,6 +266,12 @@ export class TicketsService {
             email: true,
           },
         },
+        assignedUser: {
+          select: {
+            name: true,
+            email: true,
+          },
+        },
         branch: {
           select: {
             name: true,
@@ -297,6 +315,7 @@ export class TicketsService {
         accessories: updateTicketDto.accessories ?? ticket.accessories,
         risk: updateTicketDto.risk ?? ticket.risk,
         internalNotes: updateTicketDto.internalNotes ?? ticket.internalNotes,
+        assignedUserId: updateTicketDto.assignedUserId !== undefined ? updateTicketDto.assignedUserId : ticket.assignedUserId,
       },
     });
   }

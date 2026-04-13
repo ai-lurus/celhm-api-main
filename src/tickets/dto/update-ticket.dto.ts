@@ -108,6 +108,11 @@ export class UpdateTicketDto {
   @IsOptional()
   @IsString()
   internalNotes?: string;
+
+  @ApiPropertyOptional({ description: 'Usuario de laboratorio asignado' })
+  @IsOptional()
+  @IsNumber()
+  assignedUserId?: number;
 }
 
 

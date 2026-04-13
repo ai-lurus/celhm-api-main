@@ -1,6 +1,7 @@
-import { IsEnum, IsOptional, IsInt } from 'class-validator';
+import { IsEnum, IsOptional, IsInt, IsNumber, Min, Max } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
+import { Type } from 'class-transformer';
 
 export class UpdateMemberDto {
   @ApiPropertyOptional({ enum: Role })
@@ -12,4 +13,12 @@ export class UpdateMemberDto {
   @IsInt()
   @IsOptional()
   branchId?: number | null;
+
+  @ApiPropertyOptional({ description: 'Commission rate percentage (0-100)' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  commissionRate?: number | null;
 }
