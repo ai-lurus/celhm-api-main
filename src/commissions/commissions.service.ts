@@ -13,24 +13,30 @@ export class CommissionsService {
    * Called from SalesService.create() when a sale with a ticketId is fully paid.
    */
   async createCommissionForSale(saleId: number, ticketId: number, saleSubtotal: number) {
-    // Look up the ticket to get the assigned technician (assignedUserId, fallback to userId)
+    // Look up the ticket to get the assigned technician (assignedUserId, fallback to userId) and the organizationId
     const ticket = await this.prisma.ticket.findUnique({
       where: { id: ticketId },
-      select: { assignedUserId: true, userId: true },
+      select: { 
+        assignedUserId: true, 
+        userId: true,
+        branch: { select: { organizationId: true } }
+      },
     });
 
     const technicianId = ticket?.assignedUserId || ticket?.userId;
 
-    if (!technicianId) {
-      this.logger.warn(`Ticket ${ticketId} has no assigned user — skipping commission`);
+    if (!technicianId || !ticket?.branch?.organizationId) {
+      this.logger.warn(`Ticket ${ticketId} has no assigned user or organization — skipping commission`);
       return null;
     }
 
-    // Find the technician's commission rate from their OrgMembership
-    const membership = await this.prisma.orgMembership.findFirst({
+    // Find the technician's commission rate from their OrgMembership (without role restriction)
+    const membership = await this.prisma.orgMembership.findUnique({
       where: {
-        userId: technicianId,
-        role: 'LABORATORIO',
+        organizationId_userId: {
+          organizationId: ticket.branch.organizationId,
+          userId: technicianId,
+        },
       },
       select: { commissionRate: true },
     });
@@ -43,10 +49,10 @@ export class CommissionsService {
     const rate = Number(membership.commissionRate);
     const amount = Math.round((saleSubtotal * rate) / 100 * 100) / 100; // Round to 2 decimals
 
-    // Prevent duplicate commissions (upsert by saleId+userId unique constraint)
+    // Prevent duplicate commissions (upsert by saleId+ticketId+userId unique constraint)
     const existing = await this.prisma.commission.findUnique({
       where: {
-        saleId_userId: { saleId, userId: technicianId },
+        saleId_ticketId_userId: { saleId, ticketId, userId: technicianId },
       },
     });
 
@@ -162,15 +168,36 @@ export class CommissionsService {
   }
 
   async getSummary(organizationId: number) {
-    // Get all lab users in the organization with their commission totals
+    // Get users in the organization who are technicians, have a commission rate, or have received commissions
     const users = await this.prisma.user.findMany({
       where: {
-        memberships: {
-          some: {
-            organizationId,
-            role: 'LABORATORIO',
+        OR: [
+          {
+            memberships: {
+              some: {
+                organizationId,
+                role: 'LABORATORIO',
+              },
+            },
           },
-        },
+          {
+            memberships: {
+              some: {
+                organizationId,
+                commissionRate: { not: null },
+              },
+            },
+          },
+          {
+            commissions: {
+              some: {
+                ticket: {
+                  branch: { organizationId },
+                },
+              },
+            },
+          },
+        ],
       },
       select: {
         id: true,

@@ -76,6 +76,7 @@ export class SalesService {
         lines: {
           create: createSaleDto.lines.map((line) => ({
             variantId: line.variantId,
+            ticketId: line.ticketId,
             description: line.description,
             qty: line.qty,
             unitPrice: line.unitPrice,
@@ -133,17 +134,35 @@ export class SalesService {
         });
       }
 
-      // Auto-create commission if the sale is for a ticket
-      if (createSaleDto.ticketId) {
+      // Create commissions for each ticket line
+      const ticketCommissions = new Map<number, number>();
+
+      // Collect tickets from lines
+      for (const line of createSaleDto.lines) {
+        if (line.ticketId) {
+          const lineTotal = Number(line.unitPrice) * line.qty - Number(line.discount || 0);
+          ticketCommissions.set(
+            line.ticketId,
+            (ticketCommissions.get(line.ticketId) || 0) + lineTotal,
+          );
+        }
+      }
+
+      // Also consider root ticketId if not already in lines
+      if (createSaleDto.ticketId && !ticketCommissions.has(createSaleDto.ticketId)) {
+        ticketCommissions.set(createSaleDto.ticketId, subtotal);
+      }
+
+      // Generate commissions
+      for (const [tId, tSubtotal] of ticketCommissions.entries()) {
         try {
           await this.commissionsService.createCommissionForSale(
             sale.id,
-            createSaleDto.ticketId,
-            subtotal,
+            tId,
+            tSubtotal,
           );
         } catch (error) {
-          this.logger.error('Error creating commission:', error);
-          // Don't fail the sale if commission creation fails
+          this.logger.error(`Error creating commission for ticket ${tId}:`, error);
         }
       }
 
@@ -394,6 +413,19 @@ export class SalesService {
         data: { status: newStatus },
       }),
     ]);
+
+    // If sale becomes fully paid and is linked to a ticket, generate commission
+    if (newStatus === SaleStatus.PAGADO && sale.ticketId) {
+      try {
+        await this.commissionsService.createCommissionForSale(
+          sale.id,
+          sale.ticketId,
+          Number(sale.subtotal),
+        );
+      } catch (error) {
+        this.logger.error('Error creating commission on addPayment:', error);
+      }
+    }
 
     return payment;
   }
