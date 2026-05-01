@@ -12,7 +12,7 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     const request = context.switchToHttp().getRequest();
     const url = request.url;
 
-    const publicPaths = ['/health', '/docs', '/auth/login'];
+    const publicPaths = ['/health', '/docs', '/auth/login', '/auth/forgot-password'];
     if (publicPaths.some(path => url.startsWith(path))) {
       return true;
     }
