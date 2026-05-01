@@ -108,7 +108,7 @@ export class OrgService {
 
     const membership = await this.prisma.orgMembership.findUnique({
       where: { id: memberId },
-      include: { user: true },
+      include: { user: { include: { memberships: true } } },
     });
 
     console.log('[deleteMember] Membership found:', membership ? `id=${membership.id}, userId=${membership.userId}` : 'null');
@@ -119,7 +119,8 @@ export class OrgService {
     }
 
     const targetUser = membership.user;
-    console.log('[deleteMember] Target user:', { id: targetUser.id, email: targetUser.email, authUserId: targetUser.authUserId });
+    const hasOtherMemberships = targetUser.memberships.length > 1;
+    console.log('[deleteMember] Target user:', { id: targetUser.id, email: targetUser.email, authUserId: targetUser.authUserId, hasOtherMemberships });
 
     try {
       // Delete membership and user record from the database in a transaction
@@ -128,27 +129,31 @@ export class OrgService {
         console.log('[deleteMember] Deleting orgMembership:', memberId);
         await tx.orgMembership.delete({ where: { id: memberId } });
 
-        // Nullify foreign keys referencing this user (all are optional)
-        console.log('[deleteMember] Nullifying foreign keys for userId:', targetUser.id);
-        await tx.ticket.updateMany({ where: { userId: targetUser.id }, data: { userId: null } });
-        await tx.ticketHistory.updateMany({ where: { userId: targetUser.id }, data: { userId: null } });
-        await tx.sale.updateMany({ where: { userId: targetUser.id }, data: { userId: null } });
-        await tx.payment.updateMany({ where: { userId: targetUser.id }, data: { userId: null } });
-        await tx.movement.updateMany({ where: { userId: targetUser.id }, data: { userId: null } });
-        await tx.cashCut.updateMany({ where: { userId: targetUser.id }, data: { userId: null } });
+        if (!hasOtherMemberships) {
+          // Nullify foreign keys referencing this user (all are optional)
+          console.log('[deleteMember] Nullifying foreign keys for userId:', targetUser.id);
+          await tx.ticket.updateMany({ where: { userId: targetUser.id }, data: { userId: null } });
+          await tx.ticketHistory.updateMany({ where: { userId: targetUser.id }, data: { userId: null } });
+          await tx.sale.updateMany({ where: { userId: targetUser.id }, data: { userId: null } });
+          await tx.payment.updateMany({ where: { userId: targetUser.id }, data: { userId: null } });
+          await tx.movement.updateMany({ where: { userId: targetUser.id }, data: { userId: null } });
+          await tx.cashCut.updateMany({ where: { userId: targetUser.id }, data: { userId: null } });
 
-        // Now delete the user
-        console.log('[deleteMember] Deleting user from DB:', targetUser.id);
-        await tx.user.delete({ where: { id: targetUser.id } });
-        console.log('[deleteMember] User deleted from DB successfully');
+          // Now delete the user
+          console.log('[deleteMember] Deleting user from DB:', targetUser.id);
+          await tx.user.delete({ where: { id: targetUser.id } });
+          console.log('[deleteMember] User deleted from DB successfully');
+        } else {
+          console.log('[deleteMember] User belongs to other organizations, skipping user deletion');
+        }
       });
     } catch (error) {
       console.error('[deleteMember] Transaction FAILED:', error);
       throw error;
     }
 
-    // Delete the user from Supabase Auth (if they have an auth account)
-    if (targetUser.authUserId) {
+    // Delete the user from Supabase Auth (if they have an auth account and no other memberships)
+    if (!hasOtherMemberships && targetUser.authUserId) {
       console.log('[deleteMember] Deleting from Supabase Auth:', targetUser.authUserId);
       const deleted = await this.supabase.deleteAuthUser(targetUser.authUserId);
       console.log('[deleteMember] Supabase Auth delete result:', deleted);
@@ -157,6 +162,8 @@ export class OrgService {
           `User ${targetUser.id} removed from DB but failed to delete from Supabase Auth (authUserId: ${targetUser.authUserId})`,
         );
       }
+    } else if (hasOtherMemberships && targetUser.authUserId) {
+      console.log('[deleteMember] User belongs to other organizations, skipping Supabase Auth delete');
     } else {
       console.log('[deleteMember] No authUserId – skipping Supabase Auth delete');
     }

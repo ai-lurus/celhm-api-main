@@ -14,15 +14,15 @@ model Organization {
   id           Int                    @id @default(autoincrement())
   name         String
   slug         String                 @unique
-  logo         String?
-  phone        String?
-  address      String?
-  email        String?
-  taxId        String?
-  website      String?
-  currency     String                 @default("MXN")
-  timezone     String                 @default("America/Mexico_City")
-  vatRate      Decimal                @default(0.16) @db.Decimal(10, 2)
+  logo          String?             
+  phone         String?             
+  address       String?             
+  email         String?             
+  taxId         String?             
+  website       String?             
+  currency      String                @default("MXN") 
+  timezone      String                @default("America/Mexico_City") 
+  vatRate       Decimal               @default(0.16) @db.Decimal(10, 2) 
   createdAt    DateTime               @default(now())
   updatedAt    DateTime               @updatedAt
   branches     Branch[]
@@ -30,7 +30,7 @@ model Organization {
   templates    NotificationTemplate[]
   users        OrgMembership[]
   defaultUsers User[]                 @relation("DefaultOrganization")
-
+  
   @@map("organizations")
 }
 
@@ -39,6 +39,7 @@ model OrgMembership {
   organizationId Int
   userId         Int
   role           Role
+  commissionRate Decimal?     @db.Decimal(5, 2)
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -59,12 +60,14 @@ model User {
   updatedAt             DateTime        @updatedAt
   password              String?
   cashCuts              CashCut[]
+  commissions           Commission[]
   movements             Movement[]
   memberships           OrgMembership[]
   payments              Payment[]
   sales                 Sale[]
   ticketHistory         TicketHistory[]
   tickets               Ticket[]        @relation("TicketCreator")
+  assignedTickets       Ticket[]        @relation("TicketAssignedUser")
   branch                Branch?         @relation(fields: [branchId], references: [id])
   defaultOrganization   Organization?   @relation("DefaultOrganization", fields: [defaultOrganizationId], references: [id])
 
@@ -162,6 +165,7 @@ model Movement {
   variantId Int
   type      MovementType
   qty       Int
+  totalCost Decimal?     @db.Decimal(10, 2)
   reason    String?
   folio     String?
   ticketId  Int?
@@ -169,7 +173,6 @@ model Movement {
   ip        String?
   userAgent String?
   createdAt DateTime     @default(now())
-  totalCost Decimal?     @db.Decimal(10, 2)
   branch    Branch       @relation(fields: [branchId], references: [id], onDelete: Cascade)
   ticket    Ticket?      @relation(fields: [ticketId], references: [id])
   user      User?        @relation(fields: [userId], references: [id])
@@ -185,17 +188,17 @@ model Customer {
   organizationId Int
   branchId       Int?
   name           String
+  lastName       String       @default("")
   phone          String
+  phoneAlt       String?
   email          String?
+  rfc            String?
   notes          String?
   isWholesale    Boolean      @default(false)
   isCorporate    Boolean      @default(false)
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
   deletedAt      DateTime?
-  lastName       String       @default("")
-  rfc            String?
-  phoneAlt       String?
   branch         Branch?      @relation(fields: [branchId], references: [id])
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   sales          Sale[]
@@ -209,13 +212,13 @@ model Customer {
 }
 
 model ProductCategory {
-  id        Int               @id @default(autoincrement())
-  name      String            @unique
-  createdAt DateTime          @default(now())
-  updatedAt DateTime          @updatedAt
-  parentId  Int?
-  parent    ProductCategory?  @relation("CategoryChildren", fields: [parentId], references: [id])
-  children  ProductCategory[] @relation("CategoryChildren")
+  id            Int               @id @default(autoincrement())
+  name          String            @unique
+  parentId      Int?
+  parent        ProductCategory?  @relation("CategoryChildren", fields: [parentId], references: [id])
+  children      ProductCategory[] @relation("CategoryChildren")
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
 
   @@map("product_categories")
 }
@@ -234,9 +237,10 @@ model DeviceModel {
   id         Int         @id @default(autoincrement())
   brandId    Int
   name       String
+  deviceType String?
+
   createdAt  DateTime    @default(now())
   updatedAt  DateTime    @updatedAt
-  deviceType String?
   brand      DeviceBrand @relation(fields: [brandId], references: [id], onDelete: Cascade)
   tickets    Ticket[]
 
@@ -275,14 +279,18 @@ model Ticket {
   risk           String?
   deletedAt      DateTime?
   deviceId       Int?
+  commissions    Commission[]
   movements      Movement[]
   sales          Sale[]
+  saleLines      SaleLine[]
   history        TicketHistory[]
   parts          TicketPart[]
   branch         Branch          @relation(fields: [branchId], references: [id], onDelete: Cascade)
   customer       Customer?       @relation(fields: [customerId], references: [id])
   deviceModel    DeviceModel?    @relation(fields: [deviceId], references: [id])
   user           User?           @relation("TicketCreator", fields: [userId], references: [id])
+  assignedUserId Int?
+  assignedUser   User?           @relation("TicketAssignedUser", fields: [assignedUserId], references: [id])
 
   @@index([branchId, state])
   @@index([folio])
@@ -375,33 +383,34 @@ model Notification {
 }
 
 model Sale {
-  id             Int           @id @default(autoincrement())
+  id             Int            @id @default(autoincrement())
   branchId       Int
-  folio          String        @unique
+  folio          String         @unique
   customerId     Int?
   ticketId       Int?
-  status         SaleStatus    @default(PENDIENTE)
-  subtotal       Decimal       @db.Decimal(10, 2)
-  discount       Decimal       @default(0) @db.Decimal(10, 2)
-  total          Decimal       @db.Decimal(10, 2)
+  status         SaleStatus     @default(PENDIENTE)
+  subtotal       Decimal        @db.Decimal(10, 2)
+  discount       Decimal        @default(0) @db.Decimal(10, 2)
+  total          Decimal        @db.Decimal(10, 2)
   userId         Int?
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
   deletedAt      DateTime?
   cashRegisterId Int?
-  isReturn       Boolean       @default(false)
-  returnOfSaleId Int?
   cashCutId      Int?
+  isReturn       Boolean        @default(false)
+  returnOfSaleId Int?
+  commissions      Commission[]
   payments       Payment[]
   lines          SaleLine[]
-  branch         Branch        @relation(fields: [branchId], references: [id], onDelete: Cascade)
-  cashCut        CashCut?      @relation(fields: [cashCutId], references: [id])
-  cashRegister   CashRegister? @relation(fields: [cashRegisterId], references: [id])
-  customer       Customer?     @relation(fields: [customerId], references: [id])
-  returnOfSale   Sale?         @relation("SaleReturns", fields: [returnOfSaleId], references: [id])
-  returns        Sale[]        @relation("SaleReturns")
-  ticket         Ticket?       @relation(fields: [ticketId], references: [id])
-  user           User?         @relation(fields: [userId], references: [id])
+  branch         Branch         @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  customer       Customer?      @relation(fields: [customerId], references: [id])
+  ticket         Ticket?        @relation(fields: [ticketId], references: [id])
+  user           User?          @relation(fields: [userId], references: [id])
+  cashRegister   CashRegister?  @relation(fields: [cashRegisterId], references: [id])
+  cashCut        CashCut?       @relation(fields: [cashCutId], references: [id], onDelete: SetNull)
+  returnOfSale   Sale?          @relation("SaleReturns", fields: [returnOfSaleId], references: [id], onDelete: SetNull)
+  returns        Sale[]         @relation("SaleReturns")
 
   @@index([branchId, createdAt])
   @@index([folio])
@@ -426,6 +435,8 @@ model SaleLine {
   updatedAt   DateTime @updatedAt
   sale        Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
   variant     Variant? @relation(fields: [variantId], references: [id])
+  ticketId    Int?
+  ticket      Ticket?  @relation(fields: [ticketId], references: [id])
 
   @@index([saleId])
   @@map("sale_lines")
@@ -456,8 +467,8 @@ model CashRegister {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   cuts      CashCut[]
-  branch    Branch    @relation(fields: [branchId], references: [id], onDelete: Cascade)
   sales     Sale[]
+  branch    Branch    @relation(fields: [branchId], references: [id], onDelete: Cascade)
 
   @@unique([branchId, code])
   @@map("cash_registers")
@@ -468,12 +479,20 @@ model CashCut {
   cashRegisterId     Int
   branchId           Int
   date               DateTime      @db.Date
+  status             CashCutStatus @default(CLOSED)
+  openedAt           DateTime      @default(now())
+  closedAt           DateTime?
   initialAmount      Decimal       @default(0) @db.Decimal(10, 2)
   salesCash          Decimal       @default(0) @db.Decimal(10, 2)
+  salesCreditCard    Decimal       @default(0) @db.Decimal(10, 2)
+  salesDebitCard     Decimal       @default(0) @db.Decimal(10, 2)
   salesTransfer      Decimal       @default(0) @db.Decimal(10, 2)
   advances           Decimal       @default(0) @db.Decimal(10, 2)
   adjustments        Decimal       @default(0) @db.Decimal(10, 2)
   declaredAmount     Decimal       @default(0) @db.Decimal(10, 2)
+  declaredCreditCard Decimal?      @default(0) @db.Decimal(10, 2)
+  declaredDebitCard  Decimal?      @default(0) @db.Decimal(10, 2)
+  declaredTransfer   Decimal?      @default(0) @db.Decimal(10, 2)
   expectedAmount     Decimal       @default(0) @db.Decimal(10, 2)
   difference         Decimal       @default(0) @db.Decimal(10, 2)
   totalIncome        Decimal       @db.Decimal(10, 2)
@@ -482,14 +501,6 @@ model CashCut {
   userId             Int?
   createdAt          DateTime      @default(now())
   updatedAt          DateTime      @updatedAt
-  status             CashCutStatus @default(CLOSED)
-  openedAt           DateTime      @default(now())
-  closedAt           DateTime?
-  salesCreditCard    Decimal       @default(0) @db.Decimal(10, 2)
-  salesDebitCard     Decimal       @default(0) @db.Decimal(10, 2)
-  declaredCreditCard Decimal?      @default(0) @db.Decimal(10, 2)
-  declaredDebitCard  Decimal?      @default(0) @db.Decimal(10, 2)
-  declaredTransfer   Decimal?      @default(0) @db.Decimal(10, 2)
   branch             Branch        @relation(fields: [branchId], references: [id], onDelete: Cascade)
   cashRegister       CashRegister  @relation(fields: [cashRegisterId], references: [id], onDelete: Cascade)
   user               User?         @relation(fields: [userId], references: [id])
@@ -574,4 +585,34 @@ enum SaleStatus {
   PENDIENTE
   PAGADO
   CANCELADO
+}
+
+enum CommissionStatus {
+  PENDIENTE
+  PAGADA
+  CANCELADA
+}
+
+model Commission {
+  id          Int              @id @default(autoincrement())
+  saleId      Int
+  ticketId    Int
+  userId      Int
+  amount      Decimal          @db.Decimal(10, 2)
+  rate        Decimal          @db.Decimal(5, 2)
+  saleTotal   Decimal          @db.Decimal(10, 2)
+  status      CommissionStatus @default(PENDIENTE)
+  paidAt      DateTime?
+  notes       String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  sale        Sale             @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  ticket      Ticket           @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([saleId, ticketId, userId])
+  @@index([userId, createdAt])
+  @@index([status])
+  @@map("commissions")
 }
