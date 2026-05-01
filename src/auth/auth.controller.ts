@@ -4,6 +4,7 @@ import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterUserDto } from './dto/register-user.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 
 
@@ -38,6 +39,15 @@ export class AuthController {
   async changePassword(@Request() req, @Body() dto: ChangePasswordDto) {
     await this.authService.changePassword(req.user.id, dto);
     return { message: 'Password changed successfully' };
+  }
+
+  @Post('forgot-password')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Send temporary password to email' })
+  @ApiResponse({ status: 200, description: 'Email sent if account exists' })
+  async forgotPassword(@Body() dto: ForgotPasswordDto) {
+    await this.authService.forgotPassword(dto.email);
+    return { message: 'Si el correo existe, recibirás una contraseña temporal' };
   }
 
   @Post('register')
