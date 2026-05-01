@@ -22,6 +22,7 @@ import { ReportsModule } from './reports/reports.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { CommissionsModule } from './commissions/commissions.module';
 import { PrismaModule } from './common/prisma/prisma.module';
+import { SupabaseModule } from './common/supabase/supabase.module';
 import { AuditInterceptor } from './common/interceptors/audit.interceptor';
 import { SecurityHeadersInterceptor } from './common/interceptors/security-headers.interceptor';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
@@ -58,6 +59,7 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
       },
     }),
     PrismaModule,
+    SupabaseModule,
     AuthModule,
     RbacModule,
     OrgModule,
