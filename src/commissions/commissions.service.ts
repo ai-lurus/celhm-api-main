@@ -171,11 +171,13 @@ export class CommissionsService {
     // Get users in the organization who are technicians, have a commission rate, or have received commissions
     const users = await this.prisma.user.findMany({
       where: {
+        status: 'ACTIVO',
         OR: [
           {
             memberships: {
               some: {
                 organizationId,
+                status: 'ACTIVO',
                 role: 'LABORATORIO',
               },
             },
@@ -184,6 +186,7 @@ export class CommissionsService {
             memberships: {
               some: {
                 organizationId,
+                status: 'ACTIVO',
                 commissionRate: { not: null },
               },
             },

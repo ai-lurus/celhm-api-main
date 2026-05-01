@@ -34,7 +34,7 @@ export class OrgService {
 
   async getOrganizationMembers(organizationId: number) {
     return this.prisma.orgMembership.findMany({
-      where: { organizationId },
+      where: { organizationId, status: 'ACTIVO' },
       include: {
         user: {
           select: {
@@ -104,14 +104,16 @@ export class OrgService {
   }
 
   async deleteMember(user: AuthUser, memberId: number) {
-    console.log('[deleteMember] Called with memberId:', memberId, 'by user:', user.id);
-
     const membership = await this.prisma.orgMembership.findUnique({
       where: { id: memberId },
-      include: { user: { include: { memberships: true } } },
+      include: {
+        user: {
+          include: {
+            memberships: { where: { status: 'ACTIVO', id: { not: memberId } } },
+          },
+        },
+      },
     });
-
-    console.log('[deleteMember] Membership found:', membership ? `id=${membership.id}, userId=${membership.userId}` : 'null');
 
     if (!membership) throw new NotFoundException('Member not found');
     if (membership.organizationId !== user.organizationId) {
@@ -119,56 +121,25 @@ export class OrgService {
     }
 
     const targetUser = membership.user;
-    const hasOtherMemberships = targetUser.memberships.length > 1;
-    console.log('[deleteMember] Target user:', { id: targetUser.id, email: targetUser.email, authUserId: targetUser.authUserId, hasOtherMemberships });
+    const hasOtherActiveMemberships = targetUser.memberships.length > 0;
 
-    try {
-      // Delete membership and user record from the database in a transaction
-      await this.prisma.$transaction(async (tx) => {
-        // Remove membership
-        console.log('[deleteMember] Deleting orgMembership:', memberId);
-        await tx.orgMembership.delete({ where: { id: memberId } });
+    await this.prisma.$transaction(async (tx) => {
+      await tx.orgMembership.update({ where: { id: memberId }, data: { status: 'INACTIVO' } });
 
-        if (!hasOtherMemberships) {
-          // Nullify foreign keys referencing this user (all are optional)
-          console.log('[deleteMember] Nullifying foreign keys for userId:', targetUser.id);
-          await tx.ticket.updateMany({ where: { userId: targetUser.id }, data: { userId: null } });
-          await tx.ticketHistory.updateMany({ where: { userId: targetUser.id }, data: { userId: null } });
-          await tx.sale.updateMany({ where: { userId: targetUser.id }, data: { userId: null } });
-          await tx.payment.updateMany({ where: { userId: targetUser.id }, data: { userId: null } });
-          await tx.movement.updateMany({ where: { userId: targetUser.id }, data: { userId: null } });
-          await tx.cashCut.updateMany({ where: { userId: targetUser.id }, data: { userId: null } });
+      if (!hasOtherActiveMemberships) {
+        await tx.user.update({ where: { id: targetUser.id }, data: { status: 'INACTIVO' } });
+      }
+    });
 
-          // Now delete the user
-          console.log('[deleteMember] Deleting user from DB:', targetUser.id);
-          await tx.user.delete({ where: { id: targetUser.id } });
-          console.log('[deleteMember] User deleted from DB successfully');
-        } else {
-          console.log('[deleteMember] User belongs to other organizations, skipping user deletion');
-        }
-      });
-    } catch (error) {
-      console.error('[deleteMember] Transaction FAILED:', error);
-      throw error;
-    }
-
-    // Delete the user from Supabase Auth (if they have an auth account and no other memberships)
-    if (!hasOtherMemberships && targetUser.authUserId) {
-      console.log('[deleteMember] Deleting from Supabase Auth:', targetUser.authUserId);
+    if (!hasOtherActiveMemberships && targetUser.authUserId) {
       const deleted = await this.supabase.deleteAuthUser(targetUser.authUserId);
-      console.log('[deleteMember] Supabase Auth delete result:', deleted);
       if (!deleted) {
         this.logger.warn(
-          `User ${targetUser.id} removed from DB but failed to delete from Supabase Auth (authUserId: ${targetUser.authUserId})`,
+          `User ${targetUser.id} marked inactive but failed to delete from Supabase Auth (authUserId: ${targetUser.authUserId})`,
         );
       }
-    } else if (hasOtherMemberships && targetUser.authUserId) {
-      console.log('[deleteMember] User belongs to other organizations, skipping Supabase Auth delete');
-    } else {
-      console.log('[deleteMember] No authUserId – skipping Supabase Auth delete');
     }
 
-    console.log('[deleteMember] Done');
     return { message: 'Member removed successfully' };
   }
 }

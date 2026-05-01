@@ -39,12 +39,12 @@ export class AuthService {
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email },
       include: {
-        memberships: { take: 1, include: { organization: true } },
+        memberships: { where: { status: 'ACTIVO' }, take: 1, include: { organization: true } },
         branch: true,
       },
     });
 
-    if (!user || !user.password) {
+    if (!user || !user.password || user.status === 'INACTIVO') {
       throw new UnauthorizedException('Credenciales inválidas');
     }
 
@@ -90,14 +90,14 @@ export class AuthService {
         where: { id: payload.sub },
         include: {
           memberships: {
-            where: { organizationId: payload.organizationId },
+            where: { organizationId: payload.organizationId, status: 'ACTIVO' },
             include: { organization: true },
           },
           branch: true,
         },
       });
 
-      if (!user || !user.memberships.length) {
+      if (!user || user.status === 'INACTIVO' || !user.memberships.length) {
         return null;
       }
 
@@ -165,6 +165,40 @@ export class AuthService {
       where: { id: userId },
       data: { password: hashed },
     });
+  }
+
+  async forgotPassword(email: string): Promise<void> {
+    const user = await this.prisma.user.findUnique({
+      where: { email },
+      include: { memberships: { where: { status: 'ACTIVO' }, take: 1 } },
+    });
+
+    if (!user || user.status === 'INACTIVO' || !user.memberships.length) {
+      return;
+    }
+
+    const tempPassword =
+      Math.random().toString(36).slice(-8) +
+      Math.random().toString(36).slice(-8).toUpperCase() +
+      '!';
+    const hashedPassword = await bcrypt.hash(tempPassword, 10);
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { password: hashedPassword },
+    });
+
+    const appUrl = this.configService.get<string>('APP_URL');
+    await this.emailProvider.send(
+      email,
+      'Recuperación de contraseña - CelHM',
+      `<p>Hola <strong>${user.name}</strong>,</p>
+       <p>Recibimos una solicitud para restablecer tu contraseña. Usa la siguiente contraseña temporal para ingresar:</p>
+       <p><strong>Contraseña temporal:</strong> ${tempPassword}</p>
+       <p><a href="${appUrl}">Ingresar a CelHM</a></p>
+       <p>Te recomendamos cambiar tu contraseña después de ingresar.</p>
+       <p>Si no solicitaste este cambio, ignora este correo.</p>`,
+    );
   }
 
   async registerUser(dto: RegisterUserDto): Promise<AuthUser> {

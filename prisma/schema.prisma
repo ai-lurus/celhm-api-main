@@ -35,15 +35,16 @@ model Organization {
 }
 
 model OrgMembership {
-  id             Int          @id @default(autoincrement())
+  id             Int              @id @default(autoincrement())
   organizationId Int
   userId         Int
   role           Role
-  commissionRate Decimal?     @db.Decimal(5, 2)
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  commissionRate Decimal?         @db.Decimal(5, 2)
+  status         MembershipStatus @default(ACTIVO)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, userId])
   @@map("org_memberships")
@@ -56,6 +57,7 @@ model User {
   name                  String?
   defaultOrganizationId Int?
   branchId              Int?
+  status                UserStatus      @default(ACTIVO)
   createdAt             DateTime        @default(now())
   updatedAt             DateTime        @updatedAt
   password              String?
@@ -615,4 +617,14 @@ model Commission {
   @@index([userId, createdAt])
   @@index([status])
   @@map("commissions")
+}
+
+enum UserStatus {
+  ACTIVO
+  INACTIVO
+}
+
+enum MembershipStatus {
+  ACTIVO
+  INACTIVO
 }
