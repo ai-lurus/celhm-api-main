@@ -201,7 +201,7 @@ export class AuthService {
     );
   }
 
-  async registerUser(dto: RegisterUserDto): Promise<AuthUser> {
+  async registerUser(dto: RegisterUserDto): Promise<AuthUser & { tempPassword: string }> {
     const { email, name, organizationId, role, branchId } = dto;
 
     const existing = await this.prisma.user.findUnique({ where: { email } });
@@ -249,6 +249,7 @@ export class AuthService {
       role: newUser.memberships[0].role,
       organizationId: newUser.memberships[0].organizationId,
       branchId: newUser.branchId || undefined,
+      tempPassword,
     };
   }
 }
