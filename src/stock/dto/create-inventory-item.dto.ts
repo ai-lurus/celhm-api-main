@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsInt, IsOptional, IsString, IsNumber, Min } from 'class-validator';
+import { IsInt, IsOptional, IsString, IsNumber, Min, ValidateIf } from 'class-validator';
 
 export class CreateInventoryItemDto {
   @ApiProperty({ description: 'Branch where the stock will be created' })
@@ -7,9 +7,15 @@ export class CreateInventoryItemDto {
   @IsInt()
   branchId?: number;
 
+  @ApiProperty({ description: 'Product ID (if creating stock for an existing catalog product)', required: false })
+  @IsOptional()
+  @IsInt()
+  productId?: number;
+
   @ApiProperty({ description: 'Product name' })
+  @ValidateIf((o) => !o.productId)
   @IsString()
-  name: string;
+  name?: string;
 
   @ApiProperty({ description: 'Brand', required: false })
   @IsOptional()

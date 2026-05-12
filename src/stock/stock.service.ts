@@ -300,19 +300,26 @@ export class StockService {
       sku = `SKU-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
     }
 
-    // PgBouncer transaction mode: Sequential creation (no interactive transaction)
-    // Create product first
+    // Create or fetch product first
     let product;
-    try {
-      product = await this.prisma.product.create({
-        data: {
-          name: dto.name,
-          brand: dto.brand,
-          model: dto.model,
-        },
-      });
-    } catch (error: any) {
-      throw new BadRequestException(`Failed to create product: ${error.message}`);
+    if (dto.productId) {
+      product = await this.prisma.product.findUnique({ where: { id: dto.productId } });
+      if (!product) {
+        throw new BadRequestException('Product not found');
+      }
+      dto.name = dto.name || product.name;
+    } else {
+      try {
+        product = await this.prisma.product.create({
+          data: {
+            name: dto.name!,
+            brand: dto.brand,
+            model: dto.model,
+          },
+        });
+      } catch (error: any) {
+        throw new BadRequestException(`Failed to create product: ${error.message}`);
+      }
     }
 
     // Create variant with productId
