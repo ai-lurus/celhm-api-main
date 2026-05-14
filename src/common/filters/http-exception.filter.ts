@@ -14,15 +14,21 @@ export class HttpExceptionFilter implements ExceptionFilter {
     const response = ctx.getResponse<Response>();
     const request = ctx.getRequest<Request>();
 
-    const status =
+    let status =
       exception instanceof HttpException
         ? exception.getStatus()
         : HttpStatus.INTERNAL_SERVER_ERROR;
 
-    const message =
+    let message: any =
       exception instanceof HttpException
         ? exception.getResponse()
         : 'Internal server error';
+
+    // Handle Express PayloadTooLargeError
+    if (exception && typeof exception === 'object' && 'name' in exception && (exception as any).name === 'PayloadTooLargeError') {
+      status = HttpStatus.PAYLOAD_TOO_LARGE;
+      message = 'La imagen o el archivo es demasiado grande. Por favor, sube un archivo de menor tamaño.';
+    }
 
     // Log all exceptions for debugging
     const errorDetails: any = {
