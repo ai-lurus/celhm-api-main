@@ -3,9 +3,14 @@ import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { isLocalNetworkOrigin } from './common/utils/cors.utils';
+import { json, urlencoded } from 'express';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  // Aumentar el límite de payload a 50mb para permitir subir imágenes en base64 (como el logo de la empresa)
+  app.use(json({ limit: '50mb' }));
+  app.use(urlencoded({ extended: true, limit: '50mb' }));
 
   // Enable CORS with security
   // Detect production: Vercel sets VERCEL=1, or NODE_ENV=production
