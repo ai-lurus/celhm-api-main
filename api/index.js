@@ -2,6 +2,7 @@ const { NestFactory } = require('@nestjs/core');
 const { ValidationPipe } = require('@nestjs/common');
 const { SwaggerModule, DocumentBuilder } = require('@nestjs/swagger');
 const { AppModule } = require('../dist/app.module');
+const express = require('express');
 
 let cachedApp;
 
@@ -30,6 +31,10 @@ async function bootstrap() {
     const app = await NestFactory.create(AppModule, {
       logger: ['error', 'warn', 'log'], // Include 'log' to see PrismaService logs
     });
+
+    // Aumentar el límite de payload a 50mb para permitir subir imágenes en base64
+    app.use(express.json({ limit: '50mb' }));
+    app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
     // Enable CORS - Allow all origins in production for now, can be restricted later
     const isProduction = process.env.NODE_ENV === 'production' || process.env.VERCEL === '1';
