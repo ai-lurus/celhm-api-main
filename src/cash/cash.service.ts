@@ -232,6 +232,11 @@ export class CashService {
               code: true,
             },
           },
+          sales: {
+            include: {
+              payments: true,
+            },
+          },
         },
         orderBy: [{ date: 'desc' }, { id: 'desc' }],
         skip,
@@ -240,8 +245,50 @@ export class CashService {
       this.prisma.cashCut.count({ where }),
     ]);
 
+    const enhancedCuts = cuts.map((cut) => {
+      let enhancedCut = { ...cut } as any;
+
+      if (cut.status === CashCutStatus.OPEN && cut.sales) {
+        let salesCash = 0;
+        let salesDebitCard = 0;
+        let salesCreditCard = 0;
+        let salesTransfer = 0;
+
+        for (const sale of cut.sales) {
+          if (sale.status === SaleStatus.PAGADO) {
+            for (const payment of sale.payments) {
+              const amount = Number(payment.amount);
+              switch (payment.method) {
+                case PaymentMethod.EFECTIVO:
+                  salesCash += amount;
+                  break;
+                case PaymentMethod.TARJETA_DEBITO:
+                  salesDebitCard += amount;
+                  break;
+                case PaymentMethod.TARJETA_CREDITO:
+                  salesCreditCard += amount;
+                  break;
+                case PaymentMethod.TRANSFERENCIA:
+                  salesTransfer += amount;
+                  break;
+              }
+            }
+          }
+        }
+        enhancedCut.salesCash = salesCash;
+        enhancedCut.salesDebitCard = salesDebitCard;
+        enhancedCut.salesCreditCard = salesCreditCard;
+        enhancedCut.salesTransfer = salesTransfer;
+        enhancedCut.totalIncome = salesCash + salesDebitCard + salesCreditCard + salesTransfer;
+      }
+      
+      // Remove sales array so we don't send massive data in the list view
+      delete enhancedCut.sales;
+      return enhancedCut;
+    });
+
     return {
-      data: cuts,
+      data: enhancedCuts,
       pagination: {
         page,
         pageSize,
@@ -252,7 +299,7 @@ export class CashService {
   }
 
   async getCashCutById(id: number, organizationId: number) {
-    return this.prisma.cashCut.findFirst({
+    const cut = await this.prisma.cashCut.findFirst({
       where: {
         id,
         branch: { organizationId },
@@ -282,6 +329,46 @@ export class CashService {
         }
       },
     });
+
+    if (cut && cut.status === CashCutStatus.OPEN && cut.sales) {
+      let salesCash = 0;
+      let salesDebitCard = 0;
+      let salesCreditCard = 0;
+      let salesTransfer = 0;
+
+      for (const sale of cut.sales) {
+        if (sale.status === SaleStatus.PAGADO) {
+          for (const payment of sale.payments) {
+            const amount = Number(payment.amount);
+            switch (payment.method) {
+              case PaymentMethod.EFECTIVO:
+                salesCash += amount;
+                break;
+              case PaymentMethod.TARJETA_DEBITO:
+                salesDebitCard += amount;
+                break;
+              case PaymentMethod.TARJETA_CREDITO:
+                salesCreditCard += amount;
+                break;
+              case PaymentMethod.TRANSFERENCIA:
+                salesTransfer += amount;
+                break;
+            }
+          }
+        }
+      }
+
+      return {
+        ...cut,
+        salesCash,
+        salesDebitCard,
+        salesCreditCard,
+        salesTransfer,
+        totalIncome: salesCash + salesDebitCard + salesCreditCard + salesTransfer,
+      };
+    }
+
+    return cut;
   }
 }
 
