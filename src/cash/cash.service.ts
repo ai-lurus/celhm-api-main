@@ -33,6 +33,7 @@ export class CashService {
       where: {
         branchId,
         branch: { organizationId },
+        active: true,
       },
       include: {
         cuts: {
@@ -40,6 +41,32 @@ export class CashService {
           take: 1, // Último corte
         },
       },
+    });
+  }
+
+  async deleteCashRegister(id: number, organizationId: number) {
+    const register = await this.prisma.cashRegister.findFirst({
+      where: { id, branch: { organizationId } },
+      include: {
+        _count: {
+          select: { cuts: true, sales: true }
+        }
+      }
+    });
+
+    if (!register) {
+      throw new Error('Caja no encontrada');
+    }
+
+    if (register._count.cuts > 0 || register._count.sales > 0) {
+      return this.prisma.cashRegister.update({
+        where: { id },
+        data: { active: false },
+      });
+    }
+
+    return this.prisma.cashRegister.delete({
+      where: { id },
     });
   }
 

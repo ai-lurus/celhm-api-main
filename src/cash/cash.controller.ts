@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { CashService } from './cash.service';
 import { CreateCashCutDto } from './dto/create-cash-cut.dto';
@@ -33,6 +33,13 @@ export class CashController {
       createCashRegisterDto.name,
       user.organizationId,
     );
+  }
+
+  @Delete('registers/:id')
+  @ApiOperation({ summary: 'Delete a cash register' })
+  @ApiResponse({ status: 200, description: 'Cash register deleted successfully' })
+  deleteCashRegister(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.cashService.deleteCashRegister(parseInt(id), user.organizationId);
   }
 
   @Post('cuts')
