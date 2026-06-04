@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsOptional } from 'class-validator';
+import { IsString, IsOptional, IsBoolean } from 'class-validator';
 
 export class UpdateProductDto {
   @ApiPropertyOptional({ description: 'Product name' })
@@ -27,5 +27,15 @@ export class UpdateProductDto {
   @IsOptional()
   @IsString()
   model?: string;
+
+  @ApiPropertyOptional({ description: 'Indicates if price is editable at POS' })
+  @IsOptional()
+  @IsBoolean()
+  isPriceEditable?: boolean;
+
+  @ApiPropertyOptional({ description: 'Indicates if the product tracks inventory' })
+  @IsOptional()
+  @IsBoolean()
+  tracksInventory?: boolean;
 }
 

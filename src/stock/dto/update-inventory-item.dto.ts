@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsInt, IsOptional, IsString, IsNumber, Min } from 'class-validator';
+import { IsInt, IsOptional, IsString, IsNumber, Min, IsBoolean } from 'class-validator';
 
 export class UpdateInventoryItemDto {
   @ApiPropertyOptional({ description: 'Product name' })
@@ -72,4 +72,14 @@ export class UpdateInventoryItemDto {
   @IsInt()
   @Min(0)
   max_stock?: number;
+
+  @ApiPropertyOptional({ description: 'Indicates if price is editable at POS', required: false })
+  @IsOptional()
+  @IsBoolean()
+  isPriceEditable?: boolean;
+
+  @ApiPropertyOptional({ description: 'Indicates if the product tracks inventory', required: false })
+  @IsOptional()
+  @IsBoolean()
+  tracksInventory?: boolean;
 }

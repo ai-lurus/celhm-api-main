@@ -136,6 +136,8 @@ export class StockService {
                   category: true,
                   brand: true,
                   model: true,
+                  isPriceEditable: true,
+                  tracksInventory: true,
                 },
               },
             },
@@ -315,6 +317,8 @@ export class StockService {
             name: dto.name!,
             brand: dto.brand,
             model: dto.model,
+            isPriceEditable: dto.isPriceEditable,
+            tracksInventory: dto.tracksInventory,
           },
         });
       } catch (error: any) {
@@ -418,6 +422,8 @@ export class StockService {
           name: dto.name ?? stock.variant.product.name,
           brand: dto.brand ?? stock.variant.product.brand,
           model: dto.model ?? stock.variant.product.model,
+          ...(dto.isPriceEditable !== undefined && { isPriceEditable: dto.isPriceEditable }),
+          ...(dto.tracksInventory !== undefined && { tracksInventory: dto.tracksInventory }),
         },
       }),
       this.prisma.variant.update({

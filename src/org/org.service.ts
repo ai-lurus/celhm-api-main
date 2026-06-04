@@ -127,7 +127,14 @@ export class OrgService {
       await tx.orgMembership.update({ where: { id: memberId }, data: { status: 'INACTIVO' } });
 
       if (!hasOtherActiveMemberships) {
-        await tx.user.update({ where: { id: targetUser.id }, data: { status: 'INACTIVO' } });
+        const deletedEmail = targetUser.email ? `${targetUser.email}.deleted.${Date.now()}` : null;
+        await tx.user.update({ 
+          where: { id: targetUser.id }, 
+          data: { 
+            status: 'INACTIVO',
+            ...(deletedEmail && { email: deletedEmail }),
+          } 
+        });
       }
     });
 

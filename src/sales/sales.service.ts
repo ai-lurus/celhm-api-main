@@ -169,29 +169,36 @@ export class SalesService {
       // If variant is provided, create stock movements and update stock
       for (const line of createSaleDto.lines) {
         if (line.variantId) {
-          // Use batch transaction for movement and stock update
-          await this.prisma.$transaction([
-            this.prisma.movement.create({
-              data: {
-                branchId: createSaleDto.branchId,
-                variantId: line.variantId,
-                type: MovementType.VTA,
-                qty: line.qty,
-                reason: `Venta ${folio}`,
-                folio,
-                userId: user.id,
-              },
-            }),
-            this.prisma.stock.updateMany({
-              where: {
-                branchId: createSaleDto.branchId,
-                variantId: line.variantId,
-              },
-              data: {
-                qty: { decrement: line.qty },
-              },
-            }),
-          ]);
+          const variant = await this.prisma.variant.findUnique({
+            where: { id: line.variantId },
+            include: { product: true },
+          });
+
+          if (variant?.product?.tracksInventory !== false) {
+            // Use batch transaction for movement and stock update
+            await this.prisma.$transaction([
+              this.prisma.movement.create({
+                data: {
+                  branchId: createSaleDto.branchId,
+                  variantId: line.variantId,
+                  type: MovementType.VTA,
+                  qty: line.qty,
+                  reason: `Venta ${folio}`,
+                  folio,
+                  userId: user.id,
+                },
+              }),
+              this.prisma.stock.updateMany({
+                where: {
+                  branchId: createSaleDto.branchId,
+                  variantId: line.variantId,
+                },
+                data: {
+                  qty: { decrement: line.qty },
+                },
+              }),
+            ]);
+          }
         }
       }
     }
@@ -572,23 +579,26 @@ export class SalesService {
     // 8. Restore stock for variant lines
     for (const line of returnLinesData) {
       if (line.variantId) {
-        await this.prisma.$transaction([
-          this.prisma.movement.create({
-            data: {
-              branchId: originalSale.branchId,
-              variantId: line.variantId,
-              type: MovementType.DEV,
-              qty: line.qty,
-              reason: `Devolución ${folio} — venta original ${originalSale.folio}`,
-              folio,
-              userId: user.id,
-            },
-          }),
-          this.prisma.stock.updateMany({
-            where: { branchId: originalSale.branchId, variantId: line.variantId },
-            data: { qty: { increment: line.qty } },
-          }),
-        ]);
+        const variant = originalSale.lines.find(l => l.variantId === line.variantId)?.variant;
+        if (variant?.product?.tracksInventory !== false) {
+          await this.prisma.$transaction([
+            this.prisma.movement.create({
+              data: {
+                branchId: originalSale.branchId,
+                variantId: line.variantId,
+                type: MovementType.DEV,
+                qty: line.qty,
+                reason: `Devolución ${folio} — venta original ${originalSale.folio}`,
+                folio,
+                userId: user.id,
+              },
+            }),
+            this.prisma.stock.updateMany({
+              where: { branchId: originalSale.branchId, variantId: line.variantId },
+              data: { qty: { increment: line.qty } },
+            }),
+          ]);
+        }
       }
     }
 

@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsInt, IsOptional, IsString, IsNumber, Min, ValidateIf } from 'class-validator';
+import { IsInt, IsOptional, IsString, IsNumber, Min, ValidateIf, IsBoolean } from 'class-validator';
 
 export class CreateInventoryItemDto {
   @ApiProperty({ description: 'Branch where the stock will be created' })
@@ -65,6 +65,16 @@ export class CreateInventoryItemDto {
   @IsInt()
   @Min(0)
   max?: number;
+
+  @ApiProperty({ description: 'Indicates if price is editable at POS', required: false })
+  @IsOptional()
+  @IsBoolean()
+  isPriceEditable?: boolean;
+
+  @ApiProperty({ description: 'Indicates if the product tracks inventory', required: false })
+  @IsOptional()
+  @IsBoolean()
+  tracksInventory?: boolean;
 }
 
 

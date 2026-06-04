@@ -114,6 +114,9 @@ model Product {
   deletedAt   DateTime?
   variants    Variant[]
 
+  tracksInventory Boolean @default(true)
+  isPriceEditable Boolean @default(false)
+
   @@index([deletedAt])
   @@map("products")
 }
