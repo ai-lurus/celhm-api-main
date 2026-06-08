@@ -229,7 +229,7 @@ export class CommissionsService {
               some: {
                 organizationId,
                 status: 'ACTIVO',
-                role: { in: ['LABORATORIO', 'VENTAS'] },
+                role: { in: ['TECNICO', 'VENDEDOR'] },
               },
             },
           },

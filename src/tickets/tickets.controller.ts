@@ -17,7 +17,7 @@ import { TicketResponseDto, TicketsListResponseDto } from './dto/ticket-response
 @ApiTags('tickets')
 @Controller('tickets')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(Role.ADMINISTRADOR, Role.ADMON, Role.LABORATORIO, Role.VENTAS)
+@Roles(Role.ADMINISTRADOR, Role.TECNICO, Role.VENDEDOR)
 @ApiBearerAuth()
 export class TicketsController {
   constructor(private ticketsService: TicketsService) { }
@@ -103,7 +103,7 @@ export class TicketsController {
   @ApiResponse({ status: 404, description: 'Ticket not found' })
   @ApiResponse({ status: 400, description: 'Invalid input data' })
 
-  @Roles(Role.ADMINISTRADOR, Role.ADMON, Role.LABORATORIO)
+  @Roles(Role.ADMINISTRADOR, Role.TECNICO)
   async updateTicket(
     @Param('id') id: string,
     @Body() updateTicketDto: UpdateTicketDto,
@@ -125,7 +125,7 @@ export class TicketsController {
   @ApiResponse({ status: 404, description: 'Ticket not found' })
   @ApiResponse({ status: 400, description: 'Invalid state transition or input data' })
 
-  @Roles(Role.ADMINISTRADOR, Role.ADMON, Role.LABORATORIO)
+  @Roles(Role.ADMINISTRADOR, Role.TECNICO)
   async updateTicketState(
     @Param('id') id: string,
     @Body() updateTicketStateDto: UpdateTicketStateDto,
@@ -157,7 +157,7 @@ export class TicketsController {
   @ApiResponse({ status: 404, description: 'Ticket or variant not found' })
   @ApiResponse({ status: 400, description: 'Insufficient stock or invalid input' })
 
-  @Roles(Role.ADMINISTRADOR, Role.ADMON, Role.LABORATORIO)
+  @Roles(Role.ADMINISTRADOR, Role.TECNICO)
   async addTicketPart(
     @Param('id') id: string,
     @Body() addTicketPartDto: AddTicketPartDto,
@@ -180,7 +180,7 @@ export class TicketsController {
   })
   @ApiResponse({ status: 404, description: 'Ticket or part not found' })
 
-  @Roles(Role.ADMINISTRADOR, Role.ADMON, Role.LABORATORIO)
+  @Roles(Role.ADMINISTRADOR, Role.TECNICO)
   async removeTicketPart(
     @Param('id') id: string,
     @Param('partId') partId: string,

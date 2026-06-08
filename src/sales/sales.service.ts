@@ -189,7 +189,7 @@ export class SalesService {
       }
 
       // Generate product commissions for VENTAS role
-      if (productCommissionableSubtotal > 0 && user.role === 'VENTAS') {
+      if (productCommissionableSubtotal > 0 && user.role === 'VENDEDOR') {
         try {
           await this.commissionsService.createCommissionForProductSale(
             sale.id,
@@ -471,7 +471,7 @@ export class SalesService {
         }
       }
 
-      if (user.role === 'VENTAS') {
+      if (user.role === 'VENDEDOR') {
         const saleWithLines = await this.prisma.sale.findUnique({
           where: { id: saleId },
           include: { lines: { include: { variant: { include: { product: true } } } } },

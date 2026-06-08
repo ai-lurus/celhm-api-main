@@ -12,7 +12,7 @@ import { CreateMovementDto } from './dto/create-movement.dto';
 @ApiTags('movements')
 @Controller('movements')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(Role.ADMINISTRADOR, Role.ADMON, Role.LABORATORIO)
+@Roles(Role.ADMINISTRADOR, Role.TECNICO)
 @ApiBearerAuth()
 export class MovementsController {
   constructor(private movementsService: MovementsService) { }

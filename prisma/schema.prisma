@@ -536,10 +536,11 @@ model AuditLog {
 }
 
 enum Role {
-  ADMON
-  LABORATORIO
   ADMINISTRADOR
-  VENTAS
+  TECNICO
+  VENDEDOR
+  ALMACENISTA
+  CAJERO
 }
 
 enum TicketState {

@@ -11,7 +11,7 @@ import { Roles } from '../common/decorators/roles.decorator';
 @ApiTags('reports')
 @Controller('reports')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(Role.ADMINISTRADOR, Role.ADMON)
+@Roles(Role.ADMINISTRADOR)
 @ApiBearerAuth()
 export class ReportsController {
   constructor(private readonly reportsService: ReportsService) { }

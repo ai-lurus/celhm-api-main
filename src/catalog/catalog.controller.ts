@@ -19,7 +19,7 @@ import { UpdateDeviceModelDto } from './dto/update-device-model.dto';
 @ApiTags('catalog')
 @Controller('catalog')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(Role.ADMINISTRADOR, Role.ADMON)
+@Roles(Role.ADMINISTRADOR)
 @ApiBearerAuth()
 export class CatalogController {
   constructor(private catalogService: CatalogService) { }
@@ -33,7 +33,7 @@ export class CatalogController {
   @ApiQuery({ name: 'q', required: false, description: 'Search by name, description, brand, model or category' })
   @ApiQuery({ name: 'page', required: false, description: 'Page number (1-based)', example: 1 })
   @ApiQuery({ name: 'pageSize', required: false, description: 'Items per page', example: 50 })
-  @Roles(Role.ADMINISTRADOR, Role.ADMON, Role.VENTAS)
+  @Roles(Role.ADMINISTRADOR, Role.VENDEDOR)
   async getProducts(
     @Query('categoria') categoria?: string,
     @Query('marca') marca?: string,
@@ -89,7 +89,7 @@ export class CatalogController {
   @ApiQuery({ name: 'q', required: false, description: 'Search by SKU, name or product name' })
   @ApiQuery({ name: 'page', required: false, description: 'Page number (1-based)', example: 1 })
   @ApiQuery({ name: 'pageSize', required: false, description: 'Items per page', example: 50 })
-  @Roles(Role.ADMINISTRADOR, Role.ADMON, Role.VENTAS)
+  @Roles(Role.ADMINISTRADOR, Role.VENDEDOR)
   async getVariants(
     @Query('marca') marca?: string,
     @Query('modelo') modelo?: string,
@@ -141,7 +141,7 @@ export class CatalogController {
   @ApiOperation({ summary: 'Get variant by ID' })
   @ApiResponse({ status: 200, description: 'Variant details' })
   @ApiResponse({ status: 404, description: 'Variant not found' })
-  @Roles(Role.ADMINISTRADOR, Role.ADMON, Role.VENTAS)
+  @Roles(Role.ADMINISTRADOR, Role.VENDEDOR)
   async getVariantById(@Param('id') id: string) {
     return this.catalogService.getVariantById(parseInt(id, 10));
   }
@@ -149,7 +149,7 @@ export class CatalogController {
   @Get('categories')
   @ApiOperation({ summary: 'Get all categories' })
   @ApiResponse({ status: 200, description: 'List of categories' })
-  @Roles(Role.ADMINISTRADOR, Role.ADMON, Role.VENTAS)
+  @Roles(Role.ADMINISTRADOR, Role.VENDEDOR)
   async getCategories() {
     return this.catalogService.getCategories();
   }
@@ -157,7 +157,7 @@ export class CatalogController {
   @Post('categories')
   @ApiOperation({ summary: 'Create new category' })
   @ApiResponse({ status: 201, description: 'Category created successfully' })
-  @Roles(Role.ADMINISTRADOR, Role.ADMON)
+  @Roles(Role.ADMINISTRADOR)
   async createCategory(@Body() createCategoryDto: CreateCategoryDto) {
     return this.catalogService.createCategory(createCategoryDto.name, createCategoryDto.parentId);
   }
@@ -165,7 +165,7 @@ export class CatalogController {
   @Patch('categories/:id')
   @ApiOperation({ summary: 'Update category' })
   @ApiResponse({ status: 200, description: 'Category updated successfully' })
-  @Roles(Role.ADMINISTRADOR, Role.ADMON)
+  @Roles(Role.ADMINISTRADOR)
   async updateCategory(
     @Param('id') id: string,
     @Body() updateCategoryDto: UpdateCategoryDto,
@@ -180,7 +180,7 @@ export class CatalogController {
   @Delete('categories/:id')
   @ApiOperation({ summary: 'Delete category' })
   @ApiResponse({ status: 200, description: 'Category deleted successfully' })
-  @Roles(Role.ADMINISTRADOR, Role.ADMON)
+  @Roles(Role.ADMINISTRADOR)
   async deleteCategory(@Param('id') id: string) {
     return this.catalogService.deleteCategory(parseInt(id, 10));
   }
@@ -188,7 +188,7 @@ export class CatalogController {
   @Get('brands')
   @ApiOperation({ summary: 'Get all brands' })
   @ApiResponse({ status: 200, description: 'List of brands' })
-  @Roles(Role.ADMINISTRADOR, Role.ADMON, Role.VENTAS, Role.LABORATORIO)
+  @Roles(Role.ADMINISTRADOR, Role.VENDEDOR, Role.TECNICO)
   async getBrands() {
     // Return both product brands and managed device brands
     const [productBrands, deviceBrands] = await Promise.all([
@@ -207,7 +207,7 @@ export class CatalogController {
   @Post('brands')
   @ApiOperation({ summary: 'Create new brand' })
   @ApiResponse({ status: 201, description: 'Brand created successfully' })
-  @Roles(Role.ADMINISTRADOR, Role.ADMON)
+  @Roles(Role.ADMINISTRADOR)
   async createBrand(@Body() createBrandDto: CreateBrandDto) {
     return this.catalogService.createBrand(createBrandDto.name);
   }
@@ -215,7 +215,7 @@ export class CatalogController {
   @Patch('brands/:id')
   @ApiOperation({ summary: 'Update brand' })
   @ApiResponse({ status: 200, description: 'Brand updated successfully' })
-  @Roles(Role.ADMINISTRADOR, Role.ADMON)
+  @Roles(Role.ADMINISTRADOR)
   async updateBrand(
     @Param('id') id: string,
     @Body() updateBrandDto: UpdateBrandDto,
@@ -226,7 +226,7 @@ export class CatalogController {
   @Delete('brands/:id')
   @ApiOperation({ summary: 'Delete brand' })
   @ApiResponse({ status: 200, description: 'Brand deleted successfully' })
-  @Roles(Role.ADMINISTRADOR, Role.ADMON)
+  @Roles(Role.ADMINISTRADOR)
   async deleteBrand(@Param('id') id: string) {
     return this.catalogService.deleteBrand(parseInt(id, 10));
   }
@@ -237,7 +237,7 @@ export class CatalogController {
   @ApiOperation({ summary: 'Get all device models, optionally filtered by brand' })
   @ApiResponse({ status: 200, description: 'List of device models' })
   @ApiQuery({ name: 'brandId', required: false, description: 'Filter by brand ID' })
-  @Roles(Role.ADMINISTRADOR, Role.ADMON, Role.VENTAS, Role.LABORATORIO)
+  @Roles(Role.ADMINISTRADOR, Role.VENDEDOR, Role.TECNICO)
   async getDeviceModels(@Query('brandId') brandId?: string) {
     return this.catalogService.getDeviceModels(brandId ? parseInt(brandId, 10) : undefined);
   }
@@ -245,7 +245,7 @@ export class CatalogController {
   @Post('device-models')
   @ApiOperation({ summary: 'Create a new device model' })
   @ApiResponse({ status: 201, description: 'Device model created successfully' })
-  @Roles(Role.ADMINISTRADOR, Role.ADMON)
+  @Roles(Role.ADMINISTRADOR)
   async createDeviceModel(@Body() dto: CreateDeviceModelDto) {
     return this.catalogService.createDeviceModel(dto);
   }
@@ -253,7 +253,7 @@ export class CatalogController {
   @Patch('device-models/:id')
   @ApiOperation({ summary: 'Update a device model' })
   @ApiResponse({ status: 200, description: 'Device model updated successfully' })
-  @Roles(Role.ADMINISTRADOR, Role.ADMON)
+  @Roles(Role.ADMINISTRADOR)
   async updateDeviceModel(
     @Param('id') id: string,
     @Body() dto: UpdateDeviceModelDto,
@@ -264,7 +264,7 @@ export class CatalogController {
   @Delete('device-models/:id')
   @ApiOperation({ summary: 'Delete a device model' })
   @ApiResponse({ status: 200, description: 'Device model deleted successfully' })
-  @Roles(Role.ADMINISTRADOR, Role.ADMON)
+  @Roles(Role.ADMINISTRADOR)
   async deleteDeviceModel(@Param('id') id: string) {
     return this.catalogService.deleteDeviceModel(parseInt(id, 10));
   }

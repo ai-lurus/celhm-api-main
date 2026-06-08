@@ -44,7 +44,7 @@ describe('TicketsService', () => {
     id: 1,
     email: 'test@example.com',
     name: 'Test User',
-    role: Role.LABORATORIO,
+    role: Role.TECNICO,
     organizationId: 1,
     branchId: 1,
   };

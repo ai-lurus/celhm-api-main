@@ -13,7 +13,7 @@ import { Response } from 'express';
 @ApiTags('commissions')
 @Controller('commissions')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(Role.ADMINISTRADOR, Role.ADMON)
+@Roles(Role.ADMINISTRADOR)
 @ApiBearerAuth()
 export class CommissionsController {
   constructor(private readonly commissionsService: CommissionsService) {}

@@ -73,31 +73,31 @@ async function main() {
     {
       email: 'admon@acme-repair.com',
       name: 'María García',
-      role: Role.ADMON,
+      role: Role.ADMINISTRADOR,
       authUserId: 'mock-auth-user-2',
     },
     {
       email: 'laboratorio@acme-repair.com',
       name: 'Carlos López',
-      role: Role.LABORATORIO,
+      role: Role.TECNICO,
       authUserId: 'mock-auth-user-3',
     },
     {
       email: 'chlau@ai-lurus.com',
       name: 'Chlau',
-      role: Role.ADMON,
+      role: Role.ADMINISTRADOR,
       authUserId: '10c73b86-b7ee-42a1-ab46-d4b30259c16a',
     },
     {
       email: 'nlau@ai-lurus.com',
       name: 'Nlau',
-      role: Role.ADMON,
+      role: Role.ADMINISTRADOR,
       authUserId: '1d001776-05ed-49cb-a580-b66d88f057a3',
     },
     {
       email: 'ascerrillos@ai-lurus.com',
       name: 'Ascerrillos',
-      role: Role.ADMON,
+      role: Role.ADMINISTRADOR,
       authUserId: '0f54967d-2275-4c51-9fa9-fc089544ef87',
     },
   ];

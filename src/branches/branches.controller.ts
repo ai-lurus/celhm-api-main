@@ -11,7 +11,7 @@ import { BranchesService } from './branches.service';
 @ApiTags('branches')
 @Controller('branches')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(Role.ADMINISTRADOR, Role.ADMON)
+@Roles(Role.ADMINISTRADOR)
 @ApiBearerAuth()
 export class BranchesController {
   constructor(private branchesService: BranchesService) { }
@@ -19,7 +19,7 @@ export class BranchesController {
   @Get()
   @ApiOperation({ summary: 'Get all branches' })
   @ApiResponse({ status: 200, description: 'Branches list' })
-  @Roles(Role.ADMINISTRADOR, Role.ADMON, Role.VENTAS)
+  @Roles(Role.ADMINISTRADOR, Role.VENDEDOR)
   async getBranches(@CurrentUser() user: AuthUser) {
     return this.branchesService.getBranches(user.organizationId);
   }
@@ -27,7 +27,7 @@ export class BranchesController {
   @Get(':id')
   @ApiOperation({ summary: 'Get branch by ID' })
   @ApiResponse({ status: 200, description: 'Branch details' })
-  @Roles(Role.ADMINISTRADOR, Role.ADMON, Role.VENTAS)
+  @Roles(Role.ADMINISTRADOR, Role.VENDEDOR)
   async getBranchById(
     @Param('id') id: string,
     @CurrentUser() user: AuthUser,
