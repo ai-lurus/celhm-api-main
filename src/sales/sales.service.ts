@@ -22,13 +22,22 @@ export class SalesService {
     // Generate folio first (handles its own atomicity)
     const folio = await this.foliosService.next('VTA', createSaleDto.branchId);
 
+    // Fetch branch to get organization's vatRate
+    const branch = await this.prisma.branch.findUnique({
+      where: { id: createSaleDto.branchId },
+      include: { organization: true },
+    });
+    const vatRate = Number(branch?.organization?.vatRate || 0.16);
+    const rate = vatRate > 1 ? vatRate / 100 : vatRate;
+
     // Calculate totals
-    const subtotal = createSaleDto.lines.reduce(
+    const sumLines = createSaleDto.lines.reduce(
       (sum, line) => sum + (Number(line.unitPrice) * line.qty - Number(line.discount || 0)),
       0,
     );
     const discount = Number(createSaleDto.discount || 0);
-    const total = subtotal - discount;
+    const total = sumLines - discount;
+    const subtotal = total / (1 + rate);
 
     let cashCutId: number | undefined;
 
@@ -141,9 +150,10 @@ export class SalesService {
       for (const line of createSaleDto.lines) {
         if (line.ticketId) {
           const lineTotal = Number(line.unitPrice) * line.qty - Number(line.discount || 0);
+          const lineSubtotal = lineTotal / (1 + rate);
           ticketCommissions.set(
             line.ticketId,
-            (ticketCommissions.get(line.ticketId) || 0) + lineTotal,
+            (ticketCommissions.get(line.ticketId) || 0) + lineSubtotal,
           );
         }
       }
@@ -464,6 +474,7 @@ export class SalesService {
           },
         },
         payments: true,
+        branch: { include: { organization: true } },
       },
     });
 
@@ -508,8 +519,11 @@ export class SalesService {
     }
 
     // 3. Calculate negative totals
-    const subtotal = -returnLinesData.reduce((sum, l) => sum + l.lineTotal, 0);
-    const total = subtotal; // no discount applied on returns
+    const vatRate = Number(originalSale.branch?.organization?.vatRate || 0.16);
+    const rate = vatRate > 1 ? vatRate / 100 : vatRate;
+    const sumLines = -returnLinesData.reduce((sum, l) => sum + l.lineTotal, 0);
+    const total = sumLines; // no discount applied on returns
+    const subtotal = total / (1 + rate);
 
     // 4. Generate DEV folio
     const folio = await this.foliosService.next('DEV', originalSale.branchId);
