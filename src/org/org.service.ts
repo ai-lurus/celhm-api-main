@@ -4,6 +4,8 @@ import { SupabaseService } from '../common/supabase/supabase.service';
 import { AuthUser } from '../auth/auth.service';
 import { UpdateOrgDto } from './dto/update-org.dto';
 import { UpdateMemberDto } from './dto/update-member.dto';
+import { UpdateMemberPasswordDto } from './dto/update-member-password.dto';
+import * as bcrypt from 'bcryptjs';
 
 @Injectable()
 export class OrgService {
@@ -148,6 +150,25 @@ export class OrgService {
     }
 
     return { message: 'Member removed successfully' };
+  }
+
+  async updateMemberPassword(user: AuthUser, memberId: number, data: UpdateMemberPasswordDto) {
+    const membership = await this.prisma.orgMembership.findUnique({
+      where: { id: memberId },
+    });
+
+    if (!membership) throw new NotFoundException('Member not found');
+    if (membership.organizationId !== user.organizationId) {
+      throw new ForbiddenException('Member does not belong to your organization');
+    }
+
+    const hashed = await bcrypt.hash(data.newPassword, 10);
+    await this.prisma.user.update({
+      where: { id: membership.userId },
+      data: { password: hashed },
+    });
+
+    return { message: 'Password updated successfully' };
   }
 }
 

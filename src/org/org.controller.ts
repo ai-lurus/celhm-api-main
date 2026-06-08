@@ -9,6 +9,7 @@ import type { AuthUser } from '../auth/auth.service';
 import { OrgService } from './org.service';
 import { UpdateOrgDto } from './dto/update-org.dto';
 import { UpdateMemberDto } from './dto/update-member.dto';
+import { UpdateMemberPasswordDto } from './dto/update-member-password.dto';
 
 @ApiTags('organizations')
 @Controller('orgs')
@@ -63,6 +64,17 @@ export class OrgController {
     @Param('id', ParseIntPipe) id: number,
   ) {
     return this.orgService.deleteMember(user, id);
+  }
+
+  @Patch('members/:id/password')
+  @ApiOperation({ summary: 'Update member password (Admin only)' })
+  @ApiResponse({ status: 200, description: 'Password updated successfully' })
+  async updateMemberPassword(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateMemberPasswordDto,
+  ) {
+    return this.orgService.updateMemberPassword(user, id, dto);
   }
 }
 
