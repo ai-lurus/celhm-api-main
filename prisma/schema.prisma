@@ -504,6 +504,7 @@ model CashCut {
   finalAmount        Decimal       @db.Decimal(10, 2)
   notes              String?
   userId             Int?
+  denominations      Json?
   createdAt          DateTime      @default(now())
   updatedAt          DateTime      @updatedAt
   branch             Branch        @relation(fields: [branchId], references: [id], onDelete: Cascade)

@@ -1,7 +1,8 @@
-import { Controller, Get, Post, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Delete, Patch, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { CashService } from './cash.service';
 import { CreateCashCutDto } from './dto/create-cash-cut.dto';
+import { UpdateCashCutDto } from './dto/update-cash-cut.dto';
 import { CreateCashRegisterDto } from './dto/create-cash-register.dto';
 import { OpenCashCutDto } from './dto/open-cash-cut.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -88,6 +89,17 @@ export class CashController {
   @ApiResponse({ status: 200, description: 'Cash cut details' })
   getCashCutById(@Param('id') id: string, @CurrentUser() user: AuthUser) {
     return this.cashService.getCashCutById(parseInt(id), user.organizationId);
+  }
+
+  @Patch('cuts/:id')
+  @ApiOperation({ summary: 'Update a closed cash cut' })
+  @ApiResponse({ status: 200, description: 'Cash cut updated successfully' })
+  updateCashCut(
+    @Param('id') id: string,
+    @Body() updateCashCutDto: UpdateCashCutDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.cashService.updateCashCut(parseInt(id), updateCashCutDto, user.organizationId);
   }
 }
 

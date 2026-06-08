@@ -22,4 +22,8 @@ export class CreateCashCutDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @ApiPropertyOptional({ description: 'Breakdown of cash denominations' })
+  @IsOptional()
+  denominations?: Record<string, number>;
 }

@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { AuthUser } from '../auth/auth.service';
 import { CreateCashCutDto } from './dto/create-cash-cut.dto';
+import { UpdateCashCutDto } from './dto/update-cash-cut.dto';
 import { OpenCashCutDto } from './dto/open-cash-cut.dto';
 import { PaymentMethod, SaleStatus, CashCutStatus, Prisma } from '@prisma/client';
 
@@ -191,6 +192,7 @@ export class CashService {
         difference,
         totalIncome,
         finalAmount,
+        denominations: createCashCutDto.denominations || undefined,
         notes: createCashCutDto.notes,
         userId: user.id,
       },
@@ -396,6 +398,40 @@ export class CashService {
     }
 
     return cut;
+  }
+
+  async updateCashCut(id: number, updateDto: UpdateCashCutDto, organizationId: number) {
+    const cut = await this.prisma.cashCut.findFirst({
+      where: {
+        id,
+        branch: { organizationId },
+        status: CashCutStatus.CLOSED,
+      },
+    });
+
+    if (!cut) {
+      throw new Error('Cash cut not found or is not closed.');
+    }
+
+    const expectedAmount = Number(cut.expectedAmount);
+    const newDeclaredAmount = updateDto.declaredAmount !== undefined ? Number(updateDto.declaredAmount) : Number(cut.declaredAmount);
+    const newDifference = newDeclaredAmount - expectedAmount;
+
+    return this.prisma.cashCut.update({
+      where: { id },
+      data: {
+        declaredAmount: newDeclaredAmount,
+        finalAmount: newDeclaredAmount,
+        difference: newDifference,
+        denominations: updateDto.denominations !== undefined ? (Object.keys(updateDto.denominations).length > 0 ? updateDto.denominations : Prisma.JsonNull) : cut.denominations,
+        notes: updateDto.notes !== undefined ? updateDto.notes : cut.notes,
+      },
+      include: {
+        user: { select: { name: true, email: true } },
+        cashRegister: true,
+        branch: { select: { name: true, code: true } },
+      },
+    });
   }
 }
 
