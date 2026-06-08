@@ -13,7 +13,7 @@ import type { AuthUser } from '../auth/auth.service';
 @ApiTags('customers')
 @Controller('customers')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(Role.ADMINISTRADOR, Role.ADMON, Role.RECEPCIONISTA)
+@Roles(Role.ADMINISTRADOR, Role.ADMON, Role.VENTAS)
 @ApiBearerAuth()
 export class CustomersController {
   constructor(private readonly customersService: CustomersService) { }

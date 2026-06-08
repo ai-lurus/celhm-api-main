@@ -22,7 +22,7 @@ export class StockController {
   @Get()
   @ApiOperation({ summary: 'Get stock by branch' })
   @ApiResponse({ status: 200, description: 'Stock list' })
-  @Roles(Role.ADMINISTRADOR, Role.ADMON, Role.RECEPCIONISTA)
+  @Roles(Role.ADMINISTRADOR, Role.ADMON, Role.VENTAS)
   async getStock(
     @CurrentUser() user: AuthUser,
     @Query('sucursal') sucursal?: string,
@@ -64,7 +64,7 @@ export class StockController {
   @Get('alerts')
   @ApiOperation({ summary: 'Get low stock alerts' })
   @ApiResponse({ status: 200, description: 'Low stock alerts' })
-  @Roles(Role.ADMINISTRADOR, Role.ADMON, Role.RECEPCIONISTA)
+  @Roles(Role.ADMINISTRADOR, Role.ADMON, Role.VENTAS)
   async getLowStockAlerts(@CurrentUser() user: AuthUser) {
     return this.stockService.getLowStockAlerts(user.organizationId);
   }

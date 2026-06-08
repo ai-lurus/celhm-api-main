@@ -37,5 +37,10 @@ export class UpdateProductDto {
   @IsOptional()
   @IsBoolean()
   tracksInventory?: boolean;
+
+  @ApiPropertyOptional({ description: 'Indicates if the product generates sales commissions' })
+  @IsOptional()
+  @IsBoolean()
+  isCommissionable?: boolean;
 }
 

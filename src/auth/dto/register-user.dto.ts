@@ -1,6 +1,7 @@
-import { IsEmail, IsInt, IsNotEmpty, IsOptional, IsString, IsEnum } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import { IsEmail, IsInt, IsNotEmpty, IsOptional, IsString, IsEnum, IsNumber, Min, Max } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
+import { Type } from 'class-transformer';
 
 export class RegisterUserDto {
     @ApiProperty({ example: 'user@example.com' })
@@ -27,4 +28,12 @@ export class RegisterUserDto {
     @IsInt()
     @IsOptional()
     branchId?: number;
+
+    @ApiPropertyOptional({ description: 'Commission rate percentage (0-100)' })
+    @IsOptional()
+    @Type(() => Number)
+    @IsNumber()
+    @Min(0)
+    @Max(100)
+    commissionRate?: number;
 }

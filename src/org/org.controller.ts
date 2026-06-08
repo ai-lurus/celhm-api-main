@@ -22,7 +22,7 @@ export class OrgController {
   @Get('me')
   @ApiOperation({ summary: 'Get current organization' })
   @ApiResponse({ status: 200, description: 'Current organization data' })
-  @Roles(Role.ADMINISTRADOR, Role.ADMON, Role.RECEPCIONISTA)
+  @Roles(Role.ADMINISTRADOR, Role.ADMON, Role.VENTAS)
   async getCurrentOrganization(@CurrentUser() user: AuthUser) {
     return this.orgService.getCurrentOrganization(user);
   }
@@ -40,7 +40,7 @@ export class OrgController {
   @Get('members')
   @ApiOperation({ summary: 'Get organization members' })
   @ApiResponse({ status: 200, description: 'Organization members list' })
-  @Roles(Role.ADMINISTRADOR, Role.ADMON, Role.RECEPCIONISTA)
+  @Roles(Role.ADMINISTRADOR, Role.ADMON, Role.VENTAS)
   async getOrganizationMembers(@CurrentUser() user: AuthUser) {
     return this.orgService.getOrganizationMembers(user.organizationId);
   }

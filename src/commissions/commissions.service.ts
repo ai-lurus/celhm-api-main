@@ -80,6 +80,57 @@ export class CommissionsService {
     return commission;
   }
 
+  async createCommissionForProductSale(saleId: number, userId: number, organizationId: number, saleSubtotal: number) {
+    const membership = await this.prisma.orgMembership.findUnique({
+      where: {
+        organizationId_userId: {
+          organizationId: organizationId,
+          userId: userId,
+        },
+      },
+      select: { commissionRate: true },
+    });
+
+    if (!membership?.commissionRate || Number(membership.commissionRate) <= 0) {
+      this.logger.log(`User ${userId} has no commission rate configured — skipping product commission`);
+      return null;
+    }
+
+    const rate = Number(membership.commissionRate);
+    const amount = Math.round((saleSubtotal * rate) / 100 * 100) / 100;
+
+    const existing = await this.prisma.commission.findFirst({
+      where: {
+        saleId,
+        userId,
+        ticketId: null,
+      },
+    });
+
+    if (existing) {
+      this.logger.warn(`Product commission already exists for sale ${saleId} and user ${userId}`);
+      return existing;
+    }
+
+    const commission = await this.prisma.commission.create({
+      data: {
+        saleId,
+        ticketId: null,
+        userId,
+        amount,
+        rate,
+        saleTotal: saleSubtotal,
+        status: CommissionStatus.PENDIENTE,
+      },
+    });
+
+    this.logger.log(
+      `Product commission created: $${amount} (${rate}% of $${saleSubtotal}) for user ${userId} on sale ${saleId}`,
+    );
+
+    return commission;
+  }
+
   async findAll(organizationId: number, filters?: {
     userId?: number;
     status?: CommissionStatus;
@@ -178,7 +229,7 @@ export class CommissionsService {
               some: {
                 organizationId,
                 status: 'ACTIVO',
-                role: 'LABORATORIO',
+                role: { in: ['LABORATORIO', 'VENTAS'] },
               },
             },
           },
@@ -194,9 +245,10 @@ export class CommissionsService {
           {
             commissions: {
               some: {
-                ticket: {
-                  branch: { organizationId },
-                },
+                OR: [
+                  { ticket: { branch: { organizationId } } },
+                  { sale: { branch: { organizationId } } }
+                ],
               },
             },
           },
@@ -331,9 +383,9 @@ export class CommissionsService {
         c.id,
         `"${(c.user.name || '').replace(/"/g, '""')}"`,
         c.user.email || '',
-        c.ticket.folio,
-        `"${(c.ticket.customerName || '').replace(/"/g, '""')}"`,
-        `"${(c.ticket.device || '').replace(/"/g, '""')}"`,
+        c.ticket?.folio || '',
+        `"${(c.ticket?.customerName || '').replace(/"/g, '""')}"`,
+        `"${(c.ticket?.device || 'Productos').replace(/"/g, '""')}"`,
         c.sale.folio,
         Number(c.saleTotal).toFixed(2),
         Number(c.rate).toFixed(2),

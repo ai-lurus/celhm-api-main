@@ -202,7 +202,7 @@ export class AuthService {
   }
 
   async registerUser(dto: RegisterUserDto): Promise<AuthUser & { tempPassword: string }> {
-    const { email, name, organizationId, role, branchId } = dto;
+    const { email, name, organizationId, role, branchId, commissionRate } = dto;
 
     const existing = await this.prisma.user.findUnique({ where: { email } });
     if (existing) {
@@ -212,6 +212,11 @@ export class AuthService {
     const tempPassword = Math.random().toString(36).slice(-8) + Math.random().toString(36).slice(-8).toUpperCase() + '!';
     const hashedPassword = await bcrypt.hash(tempPassword, 10);
 
+    const membershipData: any = { organizationId, role };
+    if (commissionRate !== undefined && commissionRate !== null) {
+      membershipData.commissionRate = commissionRate;
+    }
+
     const newUser = await this.prisma.user.create({
       data: {
         email,
@@ -220,7 +225,7 @@ export class AuthService {
         defaultOrganization: { connect: { id: organizationId } },
         branch: branchId ? { connect: { id: branchId } } : undefined,
         memberships: {
-          create: { organizationId, role },
+          create: membershipData,
         },
       },
       include: {

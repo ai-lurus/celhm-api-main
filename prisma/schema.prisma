@@ -116,6 +116,7 @@ model Product {
 
   tracksInventory Boolean @default(true)
   isPriceEditable Boolean @default(false)
+  isCommissionable Boolean @default(false)
 
   @@index([deletedAt])
   @@map("products")
@@ -538,7 +539,7 @@ enum Role {
   ADMON
   LABORATORIO
   ADMINISTRADOR
-  RECEPCIONISTA
+  VENTAS
 }
 
 enum TicketState {
@@ -602,7 +603,7 @@ enum CommissionStatus {
 model Commission {
   id          Int              @id @default(autoincrement())
   saleId      Int
-  ticketId    Int
+  ticketId    Int?
   userId      Int
   amount      Decimal          @db.Decimal(10, 2)
   rate        Decimal          @db.Decimal(5, 2)
@@ -614,7 +615,7 @@ model Commission {
   updatedAt   DateTime         @updatedAt
 
   sale        Sale             @relation(fields: [saleId], references: [id], onDelete: Cascade)
-  ticket      Ticket           @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  ticket      Ticket?          @relation(fields: [ticketId], references: [id], onDelete: Cascade)
   user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([saleId, ticketId, userId])

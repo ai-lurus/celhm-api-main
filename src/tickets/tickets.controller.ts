@@ -17,7 +17,7 @@ import { TicketResponseDto, TicketsListResponseDto } from './dto/ticket-response
 @ApiTags('tickets')
 @Controller('tickets')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(Role.ADMINISTRADOR, Role.ADMON, Role.LABORATORIO, Role.RECEPCIONISTA)
+@Roles(Role.ADMINISTRADOR, Role.ADMON, Role.LABORATORIO, Role.VENTAS)
 @ApiBearerAuth()
 export class TicketsController {
   constructor(private ticketsService: TicketsService) { }

@@ -145,6 +145,7 @@ export class SalesService {
 
       // Create commissions for each ticket line
       const ticketCommissions = new Map<number, number>();
+      let productCommissionableSubtotal = 0;
 
       // Collect tickets from lines
       for (const line of createSaleDto.lines) {
@@ -155,6 +156,17 @@ export class SalesService {
             line.ticketId,
             (ticketCommissions.get(line.ticketId) || 0) + lineSubtotal,
           );
+        } else if (line.variantId) {
+          // Verify if product is commissionable
+          const variant = await this.prisma.variant.findUnique({
+            where: { id: line.variantId },
+            include: { product: true },
+          });
+          if (variant?.product?.isCommissionable) {
+            const lineTotal = Number(line.unitPrice) * line.qty - Number(line.discount || 0);
+            const lineSubtotal = lineTotal / (1 + rate);
+            productCommissionableSubtotal += lineSubtotal;
+          }
         }
       }
 
@@ -173,6 +185,20 @@ export class SalesService {
           );
         } catch (error) {
           this.logger.error(`Error creating commission for ticket ${tId}:`, error);
+        }
+      }
+
+      // Generate product commissions for VENTAS role
+      if (productCommissionableSubtotal > 0 && user.role === 'VENTAS') {
+        try {
+          await this.commissionsService.createCommissionForProductSale(
+            sale.id,
+            user.id,
+            user.organizationId,
+            productCommissionableSubtotal,
+          );
+        } catch (error) {
+          this.logger.error(`Error creating product commission for sale ${sale.id}:`, error);
         }
       }
 
@@ -431,16 +457,53 @@ export class SalesService {
       }),
     ]);
 
-    // If sale becomes fully paid and is linked to a ticket, generate commission
-    if (newStatus === SaleStatus.PAGADO && sale.ticketId) {
-      try {
-        await this.commissionsService.createCommissionForSale(
-          sale.id,
-          sale.ticketId,
-          Number(sale.subtotal),
-        );
-      } catch (error) {
-        this.logger.error('Error creating commission on addPayment:', error);
+    // If sale becomes fully paid, generate commissions
+    if (newStatus === SaleStatus.PAGADO) {
+      if (sale.ticketId) {
+        try {
+          await this.commissionsService.createCommissionForSale(
+            sale.id,
+            sale.ticketId,
+            Number(sale.subtotal),
+          );
+        } catch (error) {
+          this.logger.error('Error creating commission on addPayment:', error);
+        }
+      }
+
+      if (user.role === 'VENTAS') {
+        const saleWithLines = await this.prisma.sale.findUnique({
+          where: { id: saleId },
+          include: { lines: { include: { variant: { include: { product: true } } } } },
+        });
+
+        const branch = await this.prisma.branch.findUnique({ where: { id: sale.branchId }, include: { organization: true } });
+        const vatRate = Number(branch?.organization?.vatRate || 0.16);
+        const rate = vatRate > 1 ? vatRate / 100 : vatRate;
+
+        let productSubtotal = 0;
+        if (saleWithLines) {
+          for (const line of saleWithLines.lines) {
+            if (line.variant?.product?.isCommissionable) {
+              const lineTotal = Number(line.unitPrice) * line.qty - Number(line.discount || 0);
+              const lineSubtotal = lineTotal / (1 + rate);
+              productSubtotal += lineSubtotal;
+            }
+          }
+        }
+
+        if (productSubtotal > 0) {
+          try {
+            await this.commissionsService.createCommissionForProductSale(
+              sale.id,
+              user.id,
+              user.organizationId,
+              productSubtotal,
+            );
+          } catch (error) {
+            this.logger.error('Error creating product commission on addPayment:', error);
+          }
+        }
       }
     }
 
