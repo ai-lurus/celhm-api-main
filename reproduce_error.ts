@@ -1,53 +1,63 @@
-import { PrismaClient } from '@prisma/client'
-const prisma = new PrismaClient()
+import { PrismaClient } from '@prisma/client';
+const prisma = new PrismaClient();
+
 async function main() {
-  console.log("Testing Customers...");
+  const branchId = 1;
+  const organizationId = 1; // Assuming 1
+  const page = 1;
+  const pageSize = 20;
+
+  const skip = (page - 1) * pageSize;
+
+  const where: any = {
+    branchId,
+    branch: { organizationId },
+  };
+
   try {
-    const customers = await prisma.customer.findMany({
-      where: { organizationId: 1 },
-      include: {
-        tickets: {
-          select: {
-            id: true,
-            folio: true,
-            state: true,
-            createdAt: true,
+    const [cuts, total] = await Promise.all([
+      prisma.cashCut.findMany({
+        where,
+        include: {
+          user: {
+            select: {
+              name: true,
+              email: true,
+            },
           },
-          orderBy: { createdAt: 'desc' },
-          take: 10,
-        },
-        sales: {
-          select: {
-            id: true,
-            folio: true,
-            total: true,
-            createdAt: true,
+          cashRegister: true,
+          branch: {
+            select: {
+              name: true,
+              code: true,
+            },
           },
-          orderBy: { createdAt: 'desc' },
-          take: 10,
+          sales: {
+            include: {
+              payments: true,
+            },
+          },
         },
-      },
-      orderBy: { name: 'asc' },
-      take: 50,
-    });
-    console.log("Customers Success");
+        orderBy: [{ date: 'desc' }, { id: 'desc' }],
+        skip,
+        take: pageSize,
+      }),
+      prisma.cashCut.count({ where }),
+    ]);
+    console.log("Success cuts");
   } catch(e) {
-    console.error("Customers Error:", e);
+    console.error("Error cuts:", e);
   }
 
-  console.log("\nTesting Device Models...");
   try {
-    const models = await prisma.deviceModel.findMany({
-      include: {
-        brand: { select: { id: true, name: true } },
-      },
-      orderBy: [{ brand: { name: 'asc' } }, { name: 'asc' }],
+    const branchId = 1;
+    const registerCode = undefined;
+    const count = await prisma.cashRegister.count({
+        where: { branchId },
     });
-    console.log("Device Models Success");
+    console.log("count", count);
   } catch(e) {
-    console.error("Device Models Error:", e);
+    console.error("Error register:", e);
   }
-
-  await prisma.$disconnect();
 }
-main()
+main().finally(() => prisma.$disconnect());

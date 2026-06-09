@@ -14,10 +14,19 @@ export class CashService {
     let registerCode = code;
 
     if (!registerCode) {
-      const count = await this.prisma.cashRegister.count({
-        where: { branchId },
+      const registers = await this.prisma.cashRegister.findMany({
+        where: { branchId, code: { startsWith: 'POS-' } },
+        select: { code: true },
       });
-      registerCode = `POS-${String(count + 1).padStart(2, '0')}`;
+      let maxNum = 0;
+      for (const reg of registers) {
+        const match = reg.code.match(/^POS-(\d+)$/);
+        if (match) {
+          const num = parseInt(match[1], 10);
+          if (num > maxNum) maxNum = num;
+        }
+      }
+      registerCode = `POS-${String(maxNum + 1).padStart(2, '0')}`;
     }
 
     return this.prisma.cashRegister.create({

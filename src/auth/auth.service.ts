@@ -204,57 +204,66 @@ export class AuthService {
   async registerUser(dto: RegisterUserDto): Promise<AuthUser & { tempPassword: string }> {
     const { email, name, organizationId, role, branchId, commissionRate } = dto;
 
-    const existing = await this.prisma.user.findUnique({ where: { email } });
-    if (existing) {
-      throw new ConflictException('Ya existe un usuario con ese correo');
-    }
+    try {
+      const existing = await this.prisma.user.findUnique({ where: { email } });
+      if (existing) {
+        throw new ConflictException('Ya existe un usuario con ese correo');
+      }
 
-    const tempPassword = Math.random().toString(36).slice(-8) + Math.random().toString(36).slice(-8).toUpperCase() + '!';
-    const hashedPassword = await bcrypt.hash(tempPassword, 10);
+      const tempPassword = Math.random().toString(36).slice(-8) + Math.random().toString(36).slice(-8).toUpperCase() + '!';
+      const hashedPassword = await bcrypt.hash(tempPassword, 10);
 
-    const membershipData: any = { organizationId, role };
-    if (commissionRate !== undefined && commissionRate !== null) {
-      membershipData.commissionRate = commissionRate;
-    }
+      const membershipData: any = { organizationId, role };
+      if (commissionRate !== undefined && commissionRate !== null) {
+        membershipData.commissionRate = commissionRate;
+      }
 
-    const newUser = await this.prisma.user.create({
-      data: {
-        email,
-        password: hashedPassword,
-        name,
-        defaultOrganization: { connect: { id: organizationId } },
-        branch: branchId ? { connect: { id: branchId } } : undefined,
-        memberships: {
-          create: membershipData,
+      console.log(`[registerUser] Attempting to create user: ${email}, role: ${role}, branchId: ${branchId}, orgId: ${organizationId}`);
+
+      const newUser = await this.prisma.user.create({
+        data: {
+          email,
+          password: hashedPassword,
+          name,
+          defaultOrganization: { connect: { id: organizationId } },
+          branch: branchId ? { connect: { id: branchId } } : undefined,
+          memberships: {
+            create: membershipData,
+          },
         },
-      },
-      include: {
-        memberships: { include: { organization: true } },
-      },
-    });
+        include: {
+          memberships: { include: { organization: true } },
+        },
+      });
 
-    const appUrl = this.configService.get<string>('APP_URL');
-    this.emailProvider.send(
-      email,
-      'Tu acceso a CelHM',
-      `<p>Hola <strong>${name}</strong>,</p>
-       <p>Tu cuenta ha sido creada. Usa las siguientes credenciales para ingresar:</p>
-       <p><strong>Correo:</strong> ${email}<br/>
-       <strong>Contraseña temporal:</strong> ${tempPassword}</p>
-       <p><a href="${appUrl}">Ingresar a CelHM</a></p>
-       <p>Te recomendamos cambiar tu contraseña después de tu primer inicio de sesión.</p>`,
-    ).catch((err: Error) => {
-      console.error('Failed to send credentials email:', err.message);
-    });
+      console.log(`[registerUser] User created successfully with ID: ${newUser.id}`);
 
-    return {
-      id: newUser.id,
-      email: newUser.email || '',
-      name: newUser.name || '',
-      role: newUser.memberships[0].role,
-      organizationId: newUser.memberships[0].organizationId,
-      branchId: newUser.branchId || undefined,
-      tempPassword,
-    };
+      const appUrl = this.configService.get<string>('APP_URL');
+      this.emailProvider.send(
+        email,
+        'Tu acceso a CelHM',
+        `<p>Hola <strong>${name}</strong>,</p>
+         <p>Tu cuenta ha sido creada. Usa las siguientes credenciales para ingresar:</p>
+         <p><strong>Correo:</strong> ${email}<br/>
+         <strong>Contraseña temporal:</strong> ${tempPassword}</p>
+         <p><a href="${appUrl}">Ingresar a CelHM</a></p>
+         <p>Te recomendamos cambiar tu contraseña después de tu primer inicio de sesión.</p>`,
+      ).catch((err: Error) => {
+        console.error('[registerUser] Failed to send credentials email:', err.message);
+      });
+
+      return {
+        id: newUser.id,
+        email: newUser.email || '',
+        name: newUser.name || '',
+        role: newUser.memberships[0].role,
+        organizationId: newUser.memberships[0].organizationId,
+        branchId: newUser.branchId || undefined,
+        tempPassword,
+      };
+    } catch (error) {
+      console.error('[registerUser] Detailed error during user creation:', error);
+      throw error;
+    }
   }
 }

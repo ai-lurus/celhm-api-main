@@ -1,8 +1,8 @@
 -- AlterEnum
-ALTER TYPE "Role" RENAME VALUE 'RECEPCIONISTA' TO 'VENTAS';
+ALTER TYPE "Role" ADD VALUE IF NOT EXISTS 'VENTAS';
 
 -- AlterTable
-ALTER TABLE "products" ADD COLUMN "isCommissionable" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "products" ADD COLUMN IF NOT EXISTS "isCommissionable" BOOLEAN NOT NULL DEFAULT false;
 
 -- AlterTable
 ALTER TABLE "commissions" ALTER COLUMN "ticketId" DROP NOT NULL;
