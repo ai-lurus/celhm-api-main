@@ -22,6 +22,11 @@ export class UpdateInventoryItemDto {
   @IsString()
   sku?: string;
 
+  @ApiPropertyOptional({ description: 'Barcode', required: false })
+  @IsOptional()
+  @IsString()
+  barcode?: string;
+
   @ApiPropertyOptional({ description: 'Unit sale price' })
   @IsOptional()
   @IsNumber()
