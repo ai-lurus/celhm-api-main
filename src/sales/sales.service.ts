@@ -1,4 +1,4 @@
-import { Injectable, Logger, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, NotFoundException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { FoliosService } from '../folios/folios.service';
 import { CommissionsService } from '../commissions/commissions.service';
@@ -716,5 +716,62 @@ export class SalesService {
     }
 
     return this.findOne(returnSale.id, user.organizationId);
+  }
+
+  async cancelSale(id: number, user: AuthUser) {
+    const sale = await this.prisma.sale.findFirst({
+      where: {
+        id,
+        branch: { organizationId: user.organizationId },
+      },
+      include: {
+        lines: {
+          include: { variant: { include: { product: true } } },
+        },
+        payments: true,
+      },
+    });
+
+    if (!sale) {
+      throw new NotFoundException('Venta no encontrada');
+    }
+
+    if (sale.status !== SaleStatus.PENDIENTE) {
+      throw new BadRequestException('Solo se pueden cancelar ventas pendientes');
+    }
+
+    const paidAmount = sale.payments.reduce((sum, p) => sum + Number(p.amount), 0);
+    if (paidAmount > 0) {
+      throw new ConflictException('No se puede cancelar una venta con abono registrado');
+    }
+
+    for (const line of sale.lines) {
+      if (line.variantId && line.variant?.product?.tracksInventory !== false) {
+        await this.prisma.$transaction([
+          this.prisma.movement.create({
+            data: {
+              branchId: sale.branchId,
+              variantId: line.variantId,
+              type: MovementType.DEV,
+              qty: line.qty,
+              reason: `Cancelación de venta pendiente ${sale.folio}`,
+              folio: sale.folio,
+              userId: user.id,
+            },
+          }),
+          this.prisma.stock.updateMany({
+            where: { branchId: sale.branchId, variantId: line.variantId },
+            data: { qty: { increment: line.qty } },
+          }),
+        ]);
+      }
+    }
+
+    await this.prisma.sale.update({
+      where: { id: sale.id },
+      data: { status: SaleStatus.CANCELADO },
+    });
+
+    return this.findOne(sale.id, user.organizationId);
   }
 }

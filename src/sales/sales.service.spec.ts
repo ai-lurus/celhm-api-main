@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import { SalesService } from './sales.service';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { FoliosService } from '../folios/folios.service';
@@ -15,6 +15,7 @@ describe('SalesService', () => {
       findFirst: jest.fn(),
       findMany: jest.fn(),
       create: jest.fn(),
+      update: jest.fn(),
     },
     cashCut: {
       findFirst: jest.fn(),
@@ -150,6 +151,88 @@ describe('SalesService', () => {
 
       expect(createdLine.unitPrice).toBe(-90);
       expect(createdLine.total).toBe(-90);
+    });
+  });
+
+  describe('cancelSale', () => {
+    const basePendingSale = {
+      id: 200,
+      branchId: 1,
+      folio: 'VTA-001-202607-0002',
+      status: SaleStatus.PENDIENTE,
+      payments: [] as { amount: number }[],
+      lines: [] as any[],
+    };
+
+    it('rejects when the sale is not PENDIENTE', async () => {
+      mockPrismaService.sale.findFirst.mockResolvedValue({
+        ...basePendingSale,
+        status: SaleStatus.PAGADO,
+      });
+
+      await expect(service.cancelSale(200, mockUser)).rejects.toThrow(BadRequestException);
+    });
+
+    it('rejects when the sale already has a payment registered', async () => {
+      mockPrismaService.sale.findFirst.mockResolvedValue({
+        ...basePendingSale,
+        payments: [{ amount: 50 }],
+      });
+
+      await expect(service.cancelSale(200, mockUser)).rejects.toThrow(ConflictException);
+    });
+
+    it('restores stock and marks the sale as CANCELADO', async () => {
+      mockPrismaService.sale.findFirst.mockResolvedValue({
+        ...basePendingSale,
+        lines: [
+          {
+            variantId: 5,
+            qty: 3,
+            variant: { product: { tracksInventory: true } },
+          },
+        ],
+      });
+      mockPrismaService.sale.update.mockResolvedValue({ ...basePendingSale, status: SaleStatus.CANCELADO });
+
+      await service.cancelSale(200, mockUser);
+
+      expect(mockPrismaService.movement.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          branchId: 1,
+          variantId: 5,
+          qty: 3,
+          type: 'DEV',
+          folio: 'VTA-001-202607-0002',
+        }),
+      });
+      expect(mockPrismaService.stock.updateMany).toHaveBeenCalledWith({
+        where: { branchId: 1, variantId: 5 },
+        data: { qty: { increment: 3 } },
+      });
+      expect(mockPrismaService.sale.update).toHaveBeenCalledWith({
+        where: { id: 200 },
+        data: { status: SaleStatus.CANCELADO },
+      });
+    });
+
+    it('skips stock restoration for lines whose product does not track inventory', async () => {
+      mockPrismaService.sale.findFirst.mockResolvedValue({
+        ...basePendingSale,
+        lines: [
+          {
+            variantId: 9,
+            qty: 1,
+            variant: { product: { tracksInventory: false } },
+          },
+        ],
+      });
+      mockPrismaService.sale.update.mockResolvedValue({ ...basePendingSale, status: SaleStatus.CANCELADO });
+
+      await service.cancelSale(200, mockUser);
+
+      expect(mockPrismaService.movement.create).not.toHaveBeenCalled();
+      expect(mockPrismaService.stock.updateMany).not.toHaveBeenCalled();
     });
   });
 });
