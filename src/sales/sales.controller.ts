@@ -88,4 +88,14 @@ export class SalesController {
   ) {
     return this.salesService.createReturn(parseInt(id), createReturnDto, user);
   }
+
+  @Post(':id/cancel')
+  @ApiOperation({ summary: 'Cancel a pending sale and restore its stock' })
+  @ApiResponse({ status: 201, description: 'Sale cancelled and stock restored' })
+  cancelSale(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.salesService.cancelSale(parseInt(id), user);
+  }
 }
