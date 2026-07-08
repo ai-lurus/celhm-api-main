@@ -283,7 +283,9 @@ export class SalesService {
           where.createdAt.gte = filters.startDate;
         }
         if (filters.endDate) {
-          where.createdAt.lte = filters.endDate;
+          const endDate = new Date(filters.endDate);
+          endDate.setUTCHours(23, 59, 59, 999);
+          where.createdAt.lte = endDate;
         }
       }
 
