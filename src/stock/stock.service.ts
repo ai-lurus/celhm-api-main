@@ -435,6 +435,7 @@ export class StockService {
           ...(dto.purchasePrice !== undefined && {
             purchasePrice: dto.purchasePrice,
           }),
+          ...(dto.barcode !== undefined && { barcode: dto.barcode }),
         },
       }),
       this.prisma.stock.update({
