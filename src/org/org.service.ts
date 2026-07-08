@@ -60,7 +60,12 @@ export class OrgService {
   async updateOrganization(user: AuthUser, data: UpdateOrgDto) {
     return this.prisma.organization.update({
       where: { id: user.organizationId },
-      data,
+      data: {
+        ...data,
+        ...(data.ticketLegends && {
+          ticketLegends: data.ticketLegends.map((legend) => ({ ...legend })),
+        }),
+      },
     });
   }
 

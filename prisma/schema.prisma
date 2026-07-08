@@ -22,7 +22,8 @@ model Organization {
   website       String?             
   currency      String                @default("MXN") 
   timezone      String                @default("America/Mexico_City") 
-  vatRate       Decimal               @default(0.16) @db.Decimal(10, 2) 
+  vatRate       Decimal               @default(0.16) @db.Decimal(10, 2)
+  ticketLegends Json                  @default("[]")
   createdAt    DateTime               @default(now())
   updatedAt    DateTime               @updatedAt
   branches     Branch[]

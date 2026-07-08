@@ -1,5 +1,7 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsOptional, IsEmail, IsNumber } from 'class-validator';
+import { IsString, IsOptional, IsEmail, IsNumber, IsArray, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
+import { TicketLegendDto } from './ticket-legend.dto';
 
 export class UpdateOrgDto {
     @ApiPropertyOptional({ description: 'Organization name' })
@@ -46,4 +48,14 @@ export class UpdateOrgDto {
     @IsOptional()
     @IsNumber()
     vatRate?: number;
+
+    @ApiPropertyOptional({
+        description: 'Footer legends printed at the bottom of tickets, in display order',
+        type: [TicketLegendDto],
+    })
+    @IsOptional()
+    @IsArray()
+    @ValidateNested({ each: true })
+    @Type(() => TicketLegendDto)
+    ticketLegends?: TicketLegendDto[];
 }
