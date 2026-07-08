@@ -53,6 +53,9 @@ importers:
       class-validator:
         specifier: ^0.14.0
         version: 0.14.3
+      express:
+        specifier: ^4.21.2
+        version: 4.21.2
       ioredis:
         specifier: ^5.3.2
         version: 5.8.2
