@@ -553,7 +553,25 @@ export class SalesService {
       throw new BadRequestException('No se puede hacer una devolución de una devolución');
     }
 
-    // 2. Validate return lines against original sale lines
+    // 2. Validate return lines against original sale lines, accounting for
+    // quantities already refunded in prior returns of this same sale.
+    const priorReturns = await this.prisma.sale.findMany({
+      where: { returnOfSaleId: originalSaleId, isReturn: true },
+      include: { lines: true },
+    });
+
+    const alreadyReturnedByVariant = new Map<number, number>();
+    for (const priorReturn of priorReturns) {
+      for (const line of priorReturn.lines) {
+        if (line.variantId) {
+          alreadyReturnedByVariant.set(
+            line.variantId,
+            (alreadyReturnedByVariant.get(line.variantId) || 0) + line.qty,
+          );
+        }
+      }
+    }
+
     const returnLinesData: Array<{
       variantId?: number;
       description: string;
@@ -562,22 +580,40 @@ export class SalesService {
       lineTotal: number;
     }> = [];
 
+    const pendingReturnByVariant = new Map<number, number>();
+
     for (const returnLine of dto.lines) {
       const originalLine = originalSale.lines.find((l) => l.id === returnLine.saleLineId);
       if (!originalLine) {
         throw new BadRequestException(`Línea de venta ${returnLine.saleLineId} no encontrada en la venta original`);
       }
-      if (returnLine.qty > originalLine.qty) {
+
+      if (originalLine.variantId) {
+        const alreadyReturned = alreadyReturnedByVariant.get(originalLine.variantId) || 0;
+        const pending = pendingReturnByVariant.get(originalLine.variantId) || 0;
+        const remaining = originalLine.qty - alreadyReturned - pending;
+        if (returnLine.qty > remaining) {
+          throw new BadRequestException(
+            `La cantidad a devolver (${returnLine.qty}) excede lo disponible para devolución (${Math.max(remaining, 0)}) de "${originalLine.description}"`,
+          );
+        }
+        pendingReturnByVariant.set(originalLine.variantId, pending + returnLine.qty);
+      } else if (returnLine.qty > originalLine.qty) {
         throw new BadRequestException(
           `La cantidad a devolver (${returnLine.qty}) no puede ser mayor a la cantidad comprada (${originalLine.qty}) para "${originalLine.description}"`,
         );
       }
+
+      // Prorate any per-line discount so partial returns refund the net price actually paid.
+      const netUnitPrice =
+        (Number(originalLine.unitPrice) * originalLine.qty - Number(originalLine.discount || 0)) / originalLine.qty;
+
       returnLinesData.push({
         variantId: originalLine.variantId ?? undefined,
         description: originalLine.description,
         qty: returnLine.qty,
-        unitPrice: Number(originalLine.unitPrice),
-        lineTotal: Number(originalLine.unitPrice) * returnLine.qty,
+        unitPrice: netUnitPrice,
+        lineTotal: netUnitPrice * returnLine.qty,
       });
     }
 
