@@ -35,11 +35,21 @@ export class CustomersService {
     }
 
     if (filters?.q) {
-      where.OR = [
-        { name: { contains: filters.q, mode: 'insensitive' } },
-        { phone: { contains: filters.q, mode: 'insensitive' } },
-        { email: { contains: filters.q, mode: 'insensitive' } },
-      ];
+      // Plain Prisma `contains` (ILIKE) is case-insensitive but not
+      // accent-insensitive, so e.g. searching "nunez" would never match a
+      // customer stored as "Núñez". Resolve matching ids with unaccent()
+      // first, then let Prisma handle the rest (includes, pagination, count).
+      const pattern = `%${filters.q}%`;
+      const matches = await this.prisma.$queryRaw<{ id: number }[]>`
+        SELECT id FROM customers
+        WHERE "organizationId" = ${organizationId}
+          AND (
+            unaccent(name) ILIKE unaccent(${pattern})
+            OR unaccent(phone) ILIKE unaccent(${pattern})
+            OR unaccent(COALESCE(email, '')) ILIKE unaccent(${pattern})
+          )
+      `;
+      where.id = { in: matches.map((m) => m.id) };
     }
 
     const [customers, total] = await Promise.all([
