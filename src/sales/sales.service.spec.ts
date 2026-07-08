@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { BadRequestException, ConflictException } from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { SalesService } from './sales.service';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { FoliosService } from '../folios/folios.service';
@@ -164,6 +164,12 @@ describe('SalesService', () => {
       lines: [] as any[],
     };
 
+    it('rejects when the sale does not exist', async () => {
+      mockPrismaService.sale.findFirst.mockResolvedValue(null);
+
+      await expect(service.cancelSale(999, mockUser)).rejects.toThrow(NotFoundException);
+    });
+
     it('rejects when the sale is not PENDIENTE', async () => {
       mockPrismaService.sale.findFirst.mockResolvedValue({
         ...basePendingSale,
@@ -195,8 +201,10 @@ describe('SalesService', () => {
       });
       mockPrismaService.sale.update.mockResolvedValue({ ...basePendingSale, status: SaleStatus.CANCELADO });
 
-      await service.cancelSale(200, mockUser);
+      const result = await service.cancelSale(200, mockUser);
 
+      expect(result).toEqual({ id: 999 });
+      expect(service.findOne).toHaveBeenCalledWith(200, mockUser.organizationId);
       expect(mockPrismaService.movement.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
           branchId: 1,
