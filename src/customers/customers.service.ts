@@ -1,18 +1,33 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
+import { CustomerGroupsService } from './customer-groups.service';
+import { FREQUENT_BUYER_GROUP, DEFAULT_CUSTOMER_GROUP } from './customers.constants';
 
 @Injectable()
 export class CustomersService {
-  constructor(private prisma: PrismaService) {}
+  private readonly logger = new Logger(CustomersService.name);
+
+  constructor(
+    private prisma: PrismaService,
+    private customerGroupsService: CustomerGroupsService,
+  ) {}
 
   async create(createCustomerDto: CreateCustomerDto, organizationId: number) {
+    const defaultGroup = await this.customerGroupsService.getOrCreateSystemGroup(
+      organizationId,
+      'isDefault',
+      DEFAULT_CUSTOMER_GROUP,
+    );
+
     return this.prisma.customer.create({
       data: {
         ...createCustomerDto,
         organizationId,
+        groupId: defaultGroup.id,
       },
+      include: { group: true },
     });
   }
 
@@ -56,6 +71,7 @@ export class CustomersService {
       this.prisma.customer.findMany({
         where,
         include: {
+          group: true,
           tickets: {
             select: {
               id: true,
@@ -102,6 +118,7 @@ export class CustomersService {
         organizationId,
       },
       include: {
+        group: true,
         tickets: {
           include: {
             branch: {
@@ -148,5 +165,67 @@ export class CustomersService {
       },
     });
   }
-}
 
+  /**
+   * Increments a customer's purchase counter after a sale is paid, and
+   * auto-promotes them to the frequent-buyer group once they cross the
+   * organization's configurable threshold. Applied after the triggering
+   * sale is already finalized, so the promotion only affects sales that
+   * follow it, never the one that caused it.
+   */
+  async registerPurchase(customerId: number) {
+    const customer = await this.prisma.customer.findUnique({
+      where: { id: customerId },
+      include: {
+        group: true,
+        organization: { select: { frequentBuyerThreshold: true } },
+      },
+    });
+
+    if (!customer) {
+      this.logger.warn(`registerPurchase: customer ${customerId} not found`);
+      return;
+    }
+
+    const purchaseCount = customer.purchaseCount + 1;
+    const shouldPromote =
+      !customer.group.isFrequentBuyerTarget &&
+      purchaseCount >= customer.organization.frequentBuyerThreshold;
+
+    let groupId: number | undefined;
+    if (shouldPromote) {
+      const frequentGroup = await this.customerGroupsService.getOrCreateSystemGroup(
+        customer.organizationId,
+        'isFrequentBuyerTarget',
+        FREQUENT_BUYER_GROUP,
+      );
+      groupId = frequentGroup.id;
+    }
+
+    await this.prisma.customer.update({
+      where: { id: customerId },
+      data: {
+        purchaseCount,
+        ...(groupId && { groupId }),
+      },
+    });
+  }
+
+  async updateGroup(id: number, groupId: number, organizationId: number) {
+    const customer = await this.prisma.customer.findFirst({ where: { id, organizationId } });
+    if (!customer) {
+      throw new NotFoundException('Customer not found');
+    }
+
+    const group = await this.prisma.customerGroup.findFirst({ where: { id: groupId, organizationId } });
+    if (!group) {
+      throw new BadRequestException('Group does not belong to this organization');
+    }
+
+    return this.prisma.customer.update({
+      where: { id },
+      data: { groupId },
+      include: { group: true },
+    });
+  }
+}

@@ -2,6 +2,7 @@ import { Injectable, Logger, BadRequestException, NotFoundException, ConflictExc
 import { PrismaService } from '../common/prisma/prisma.service';
 import { FoliosService } from '../folios/folios.service';
 import { CommissionsService } from '../commissions/commissions.service';
+import { CustomersService } from '../customers/customers.service';
 import { AuthUser } from '../auth/auth.service';
 import { CreateSaleDto } from './dto/create-sale.dto';
 import { CreateReturnDto } from './dto/create-return.dto';
@@ -15,6 +16,7 @@ export class SalesService {
     private prisma: PrismaService,
     private foliosService: FoliosService,
     private commissionsService: CommissionsService,
+    private customersService: CustomersService,
   ) { }
 
   async create(createSaleDto: CreateSaleDto, user: AuthUser) {
@@ -130,6 +132,16 @@ export class SalesService {
         where: { id: sale.id },
         data: { status: SaleStatus.PAGADO },
       });
+
+      // Registered customers (not "Mostrador") count this paid sale towards
+      // frequent-buyer promotion, applied for their next sale onward.
+      if (createSaleDto.customerId) {
+        try {
+          await this.customersService.registerPurchase(createSaleDto.customerId);
+        } catch (error) {
+          this.logger.error(`Error registering purchase for customer ${createSaleDto.customerId}:`, error);
+        }
+      }
 
       // If sale is for a ticket, update ticket advance payment
       if (createSaleDto.ticketId && totalEfectivoAmount > 0) {
@@ -461,6 +473,14 @@ export class SalesService {
 
     // If sale becomes fully paid, generate commissions
     if (newStatus === SaleStatus.PAGADO) {
+      if (sale.customerId) {
+        try {
+          await this.customersService.registerPurchase(sale.customerId);
+        } catch (error) {
+          this.logger.error(`Error registering purchase for customer ${sale.customerId}:`, error);
+        }
+      }
+
       if (sale.ticketId) {
         try {
           await this.commissionsService.createCommissionForSale(

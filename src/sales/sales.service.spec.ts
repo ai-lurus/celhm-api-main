@@ -4,6 +4,7 @@ import { SalesService } from './sales.service';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { FoliosService } from '../folios/folios.service';
 import { CommissionsService } from '../commissions/commissions.service';
+import { CustomersService } from '../customers/customers.service';
 import { AuthUser } from '../auth/auth.service';
 import { Role, SaleStatus } from '@prisma/client';
 
@@ -16,6 +17,9 @@ describe('SalesService', () => {
       findMany: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
+    },
+    branch: {
+      findUnique: jest.fn(),
     },
     cashCut: {
       findFirst: jest.fn(),
@@ -40,6 +44,10 @@ describe('SalesService', () => {
   const mockCommissionsService = {
     createCommissionForSale: jest.fn(),
     createCommissionForProductSale: jest.fn(),
+  };
+
+  const mockCustomersService = {
+    registerPurchase: jest.fn(),
   };
 
   const mockUser: AuthUser = {
@@ -71,6 +79,7 @@ describe('SalesService', () => {
         { provide: PrismaService, useValue: mockPrismaService },
         { provide: FoliosService, useValue: mockFoliosService },
         { provide: CommissionsService, useValue: mockCommissionsService },
+        { provide: CustomersService, useValue: mockCustomersService },
       ],
     }).compile();
 
@@ -86,6 +95,81 @@ describe('SalesService', () => {
     mockPrismaService.stock.updateMany.mockReturnValue({});
     mockPrismaService.$transaction.mockImplementation((ops: any[]) => Promise.resolve(ops));
     mockPrismaService.sale.findMany.mockResolvedValue([]);
+    mockPrismaService.branch.findUnique.mockResolvedValue({ organization: { vatRate: 0.16 } });
+  });
+
+  describe('create', () => {
+    const baseDto = {
+      branchId: 1,
+      cashRegisterId: 1,
+      lines: [{ description: 'Servicio', qty: 1, unitPrice: 100, discount: 0 }],
+      payments: [{ amount: 100, method: 'EFECTIVO' as any }],
+    };
+
+    it('registers a purchase for a registered customer once the sale is paid', async () => {
+      await service.create({ ...baseDto, customerId: 7 } as any, mockUser);
+
+      expect(mockCustomersService.registerPurchase).toHaveBeenCalledWith(7);
+    });
+
+    it('does not register a purchase for a walk-in ("Mostrador") sale', async () => {
+      await service.create(baseDto as any, mockUser);
+
+      expect(mockCustomersService.registerPurchase).not.toHaveBeenCalled();
+    });
+
+    it('does not register a purchase when the sale is left unpaid', async () => {
+      await service.create({ ...baseDto, customerId: 7, payments: undefined } as any, mockUser);
+
+      expect(mockCustomersService.registerPurchase).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('addPayment', () => {
+    it('registers a purchase when the sale becomes fully paid for a registered customer', async () => {
+      mockPrismaService.sale.findFirst.mockResolvedValue({
+        id: 300,
+        customerId: 7,
+        total: 100,
+        ticketId: null,
+        payments: [],
+      });
+      mockPrismaService.sale.update.mockResolvedValue({});
+
+      await service.addPayment(300, { amount: 100, method: 'EFECTIVO' as any }, mockUser);
+
+      expect(mockCustomersService.registerPurchase).toHaveBeenCalledWith(7);
+    });
+
+    it('does not register a purchase for a walk-in ("Mostrador") sale', async () => {
+      mockPrismaService.sale.findFirst.mockResolvedValue({
+        id: 301,
+        customerId: null,
+        total: 100,
+        ticketId: null,
+        payments: [],
+      });
+      mockPrismaService.sale.update.mockResolvedValue({});
+
+      await service.addPayment(301, { amount: 100, method: 'EFECTIVO' as any }, mockUser);
+
+      expect(mockCustomersService.registerPurchase).not.toHaveBeenCalled();
+    });
+
+    it('does not register a purchase while the sale remains partially paid', async () => {
+      mockPrismaService.sale.findFirst.mockResolvedValue({
+        id: 302,
+        customerId: 7,
+        total: 100,
+        ticketId: null,
+        payments: [],
+      });
+      mockPrismaService.sale.update.mockResolvedValue({});
+
+      await service.addPayment(302, { amount: 40, method: 'EFECTIVO' as any }, mockUser);
+
+      expect(mockCustomersService.registerPurchase).not.toHaveBeenCalled();
+    });
   });
 
   describe('createReturn', () => {

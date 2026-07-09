@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsOptional, IsEmail, IsNumber, IsArray, ValidateNested } from 'class-validator';
+import { IsString, IsOptional, IsEmail, IsNumber, IsInt, Min, IsArray, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 import { TicketLegendDto } from './ticket-legend.dto';
 
@@ -48,6 +48,12 @@ export class UpdateOrgDto {
     @IsOptional()
     @IsNumber()
     vatRate?: number;
+
+    @ApiPropertyOptional({ description: 'Number of paid purchases needed to auto-promote a customer to "Cliente Frecuente"' })
+    @IsOptional()
+    @IsInt()
+    @Min(1)
+    frequentBuyerThreshold?: number;
 
     @ApiPropertyOptional({
         description: 'Footer legends printed at the bottom of tickets, in display order',

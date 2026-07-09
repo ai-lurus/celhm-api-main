@@ -24,10 +24,12 @@ model Organization {
   timezone      String                @default("America/Mexico_City") 
   vatRate       Decimal               @default(0.16) @db.Decimal(10, 2)
   ticketLegends Json                  @default("[]")
+  frequentBuyerThreshold Int          @default(3)
   createdAt    DateTime               @default(now())
   updatedAt    DateTime               @updatedAt
   branches     Branch[]
   customers    Customer[]
+  customerGroups CustomerGroup[]
   templates    NotificationTemplate[]
   users        OrgMembership[]
   defaultUsers User[]                 @relation("DefaultOrganization")
@@ -203,11 +205,14 @@ model Customer {
   notes          String?
   isWholesale    Boolean      @default(false)
   isCorporate    Boolean      @default(false)
+  groupId        Int
+  purchaseCount  Int          @default(0)
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
   deletedAt      DateTime?
   branch         Branch?      @relation(fields: [branchId], references: [id])
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  group          CustomerGroup @relation(fields: [groupId], references: [id])
   sales          Sale[]
   tickets        Ticket[]
 
@@ -215,7 +220,24 @@ model Customer {
   @@index([organizationId, email])
   @@index([organizationId, name])
   @@index([deletedAt])
+  @@index([groupId])
   @@map("customers")
+}
+
+model CustomerGroup {
+  id                    Int          @id @default(autoincrement())
+  organizationId        Int
+  name                  String
+  isDefault             Boolean      @default(false)
+  isFrequentBuyerTarget Boolean      @default(false)
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
+  organization          Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customers             Customer[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+  @@map("customer_groups")
 }
 
 model ProductCategory {

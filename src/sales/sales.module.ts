@@ -4,9 +4,10 @@ import { SalesService } from './sales.service';
 import { PrismaModule } from '../common/prisma/prisma.module';
 import { FoliosModule } from '../folios/folios.module';
 import { CommissionsModule } from '../commissions/commissions.module';
+import { CustomersModule } from '../customers/customers.module';
 
 @Module({
-  imports: [PrismaModule, FoliosModule, CommissionsModule],
+  imports: [PrismaModule, FoliosModule, CommissionsModule, CustomersModule],
   controllers: [SalesController],
   providers: [SalesService],
   exports: [SalesService],
