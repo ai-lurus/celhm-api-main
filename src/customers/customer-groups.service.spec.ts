@@ -45,7 +45,17 @@ describe('CustomerGroupsService', () => {
       await service.create({ name: 'Mayorista' }, 10);
 
       expect(mockPrismaService.customerGroup.create).toHaveBeenCalledWith({
-        data: { name: 'Mayorista', organizationId: 10 },
+        data: { name: 'Mayorista', discountPercent: 0, organizationId: 10 },
+      });
+    });
+
+    it('creates a group with the given discount percentage', async () => {
+      mockPrismaService.customerGroup.create.mockResolvedValue({ id: 1, name: 'Mayorista', discountPercent: 15 });
+
+      await service.create({ name: 'Mayorista', discountPercent: 15 }, 10);
+
+      expect(mockPrismaService.customerGroup.create).toHaveBeenCalledWith({
+        data: { name: 'Mayorista', discountPercent: 15, organizationId: 10 },
       });
     });
 
@@ -73,6 +83,18 @@ describe('CustomerGroupsService', () => {
       mockPrismaService.customerGroup.findFirst.mockResolvedValue(null);
 
       await expect(service.rename(1, { name: 'VIP' }, 10)).rejects.toThrow(NotFoundException);
+    });
+
+    it('updates the discount percentage when provided', async () => {
+      mockPrismaService.customerGroup.findFirst.mockResolvedValue({ id: 1, organizationId: 10 });
+      mockPrismaService.customerGroup.update.mockResolvedValue({ id: 1, name: 'VIP', discountPercent: 10 });
+
+      await service.rename(1, { name: 'VIP', discountPercent: 10 }, 10);
+
+      expect(mockPrismaService.customerGroup.update).toHaveBeenCalledWith({
+        where: { id: 1 },
+        data: { name: 'VIP', discountPercent: 10 },
+      });
     });
   });
 

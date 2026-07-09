@@ -12,13 +12,14 @@ export class CustomerGroupsService {
     return this.prisma.customerGroup.findMany({
       where: { organizationId },
       orderBy: [{ isDefault: 'desc' }, { name: 'asc' }],
+      include: { _count: { select: { customers: true } } },
     });
   }
 
   async create(dto: CreateCustomerGroupDto, organizationId: number) {
     try {
       return await this.prisma.customerGroup.create({
-        data: { name: dto.name, organizationId },
+        data: { name: dto.name, discountPercent: dto.discountPercent ?? 0, organizationId },
       });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
@@ -37,7 +38,10 @@ export class CustomerGroupsService {
     try {
       return await this.prisma.customerGroup.update({
         where: { id },
-        data: { name: dto.name },
+        data: {
+          name: dto.name,
+          ...(dto.discountPercent !== undefined && { discountPercent: dto.discountPercent }),
+        },
       });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {

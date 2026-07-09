@@ -228,6 +228,7 @@ model CustomerGroup {
   id                    Int          @id @default(autoincrement())
   organizationId        Int
   name                  String
+  discountPercent       Decimal      @default(0) @db.Decimal(5, 2)
   isDefault             Boolean      @default(false)
   isFrequentBuyerTarget Boolean      @default(false)
   createdAt             DateTime     @default(now())

@@ -35,8 +35,8 @@ export class CustomerGroupsController {
 
   @Patch(':id')
   @Roles(Role.ADMINISTRADOR)
-  @ApiOperation({ summary: 'Rename a customer group' })
-  @ApiResponse({ status: 200, description: 'Customer group renamed successfully' })
+  @ApiOperation({ summary: 'Rename a customer group and/or update its discount percentage' })
+  @ApiResponse({ status: 200, description: 'Customer group updated successfully' })
   rename(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: RenameCustomerGroupDto,
