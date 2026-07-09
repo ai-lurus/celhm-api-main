@@ -15,17 +15,29 @@ export class CustomersService {
   ) {}
 
   async create(createCustomerDto: CreateCustomerDto, organizationId: number) {
-    const defaultGroup = await this.customerGroupsService.getOrCreateSystemGroup(
-      organizationId,
-      'isDefault',
-      DEFAULT_CUSTOMER_GROUP,
-    );
+    const { groupId, ...customerData } = createCustomerDto;
+
+    let resolvedGroupId: number;
+    if (groupId) {
+      const group = await this.prisma.customerGroup.findFirst({ where: { id: groupId, organizationId } });
+      if (!group) {
+        throw new BadRequestException('Group does not belong to this organization');
+      }
+      resolvedGroupId = group.id;
+    } else {
+      const defaultGroup = await this.customerGroupsService.getOrCreateSystemGroup(
+        organizationId,
+        'isDefault',
+        DEFAULT_CUSTOMER_GROUP,
+      );
+      resolvedGroupId = defaultGroup.id;
+    }
 
     return this.prisma.customer.create({
       data: {
-        ...createCustomerDto,
+        ...customerData,
         organizationId,
-        groupId: defaultGroup.id,
+        groupId: resolvedGroupId,
       },
       include: { group: true },
     });
@@ -148,12 +160,16 @@ export class CustomersService {
   }
 
   async update(id: number, updateCustomerDto: UpdateCustomerDto, organizationId: number) {
+    // groupId changes go through the dedicated (admin-only) updateGroup
+    // endpoint, which validates the group belongs to the organization.
+    const { groupId: _groupId, ...customerData } = updateCustomerDto;
+
     return this.prisma.customer.updateMany({
       where: {
         id,
         organizationId,
       },
-      data: updateCustomerDto,
+      data: customerData,
     });
   }
 

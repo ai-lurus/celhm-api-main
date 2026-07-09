@@ -44,6 +44,11 @@ export class CreateCustomerDto {
   @IsOptional()
   @IsBoolean()
   isCorporate?: boolean;
+
+  @ApiPropertyOptional({ description: "Id of the customer group to assign, from the organization's catalog. Defaults to the org's default group when omitted." })
+  @IsOptional()
+  @IsInt()
+  groupId?: number;
 }
 
 

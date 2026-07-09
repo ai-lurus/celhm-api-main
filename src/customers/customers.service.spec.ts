@@ -54,6 +54,37 @@ describe('CustomersService', () => {
       const createArgs = mockPrismaService.customer.create.mock.calls[0][0];
       expect(createArgs.data.groupId).toBe(5);
     });
+
+    it('assigns the given group when one is provided', async () => {
+      mockPrismaService.customerGroup.findFirst.mockResolvedValue({ id: 7, organizationId: 10, name: 'Mayorista' });
+      mockPrismaService.customer.create.mockResolvedValue({ id: 1, groupId: 7 });
+
+      await service.create({ name: 'Ana', phone: '5512345678', groupId: 7 } as any, 10);
+
+      expect(mockCustomerGroupsService.getOrCreateSystemGroup).not.toHaveBeenCalled();
+      const createArgs = mockPrismaService.customer.create.mock.calls[0][0];
+      expect(createArgs.data.groupId).toBe(7);
+    });
+
+    it('rejects a group that does not belong to the organization', async () => {
+      mockPrismaService.customerGroup.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.create({ name: 'Ana', phone: '5512345678', groupId: 999 } as any, 10),
+      ).rejects.toThrow(BadRequestException);
+      expect(mockPrismaService.customer.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('update', () => {
+    it('ignores a groupId in the body (group changes go through updateGroup)', async () => {
+      await service.update(1, { name: 'Ana Updated', groupId: 7 } as any, 10);
+
+      expect(mockPrismaService.customer.updateMany).toHaveBeenCalledWith({
+        where: { id: 1, organizationId: 10 },
+        data: { name: 'Ana Updated' },
+      });
+    });
   });
 
   describe('findAll', () => {
