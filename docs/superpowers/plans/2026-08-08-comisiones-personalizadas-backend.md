@@ -159,7 +159,7 @@ Expected: "Generated Prisma Client" with no errors.
 - [ ] **Step 5: Typecheck**
 
 Run: `pnpm typecheck`
-Expected: PASS (schema-only change, no application code touches the new fields yet).
+Expected: FAIL — `src/commissions/commissions.service.ts` references the old compound unique key `saleId_ticketId_userId` in its `findUnique` calls (inside `createCommissionForSale` / `createCommissionForProductSale`), which no longer exists now that `Commission`'s unique constraint changed to `[saleLineId, userId]`. This is expected — Task 4 deletes those two methods entirely and resolves the error. Confirm the only error reported is the `saleId_ticketId_userId` one in `commissions.service.ts` before moving on.
 
 - [ ] **Step 6: Commit**
 
