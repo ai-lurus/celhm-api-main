@@ -33,7 +33,8 @@ model Organization {
   templates    NotificationTemplate[]
   users        OrgMembership[]
   defaultUsers User[]                 @relation("DefaultOrganization")
-  
+  commissionPlans CommissionPlan[]
+
   @@map("organizations")
 }
 
@@ -48,6 +49,9 @@ model OrgMembership {
   updatedAt      DateTime         @updatedAt
   organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  commissionPlanId Int?
+  commissionPlan   CommissionPlan?  @relation(fields: [commissionPlanId], references: [id])
+  overrideRules    CommissionRule[]
 
   @@unique([organizationId, userId])
   @@map("org_memberships")
@@ -467,6 +471,7 @@ model SaleLine {
   variant     Variant? @relation(fields: [variantId], references: [id])
   ticketId    Int?
   ticket      Ticket?  @relation(fields: [ticketId], references: [id])
+  commissions Commission[]
 
   @@index([saleId])
   @@map("sale_lines")
@@ -643,7 +648,16 @@ model Commission {
   ticket      Ticket?          @relation(fields: [ticketId], references: [id], onDelete: Cascade)
   user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([saleId, ticketId, userId])
+  saleLineId  Int?
+  ruleId      Int?
+  basis       CommissionBasis?
+  scopeLabel  String?
+  isEstimated Boolean          @default(false)
+
+  saleLine    SaleLine?        @relation(fields: [saleLineId], references: [id], onDelete: SetNull)
+  rule        CommissionRule?  @relation(fields: [ruleId], references: [id], onDelete: SetNull)
+
+  @@unique([saleLineId, userId])
   @@index([userId, createdAt])
   @@index([status])
   @@map("commissions")
@@ -657,4 +671,60 @@ enum UserStatus {
 enum MembershipStatus {
   ACTIVO
   INACTIVO
+}
+
+enum CommissionBasis {
+  SALE_TOTAL
+  PROFIT
+}
+
+enum CommissionScope {
+  GENERAL
+  PRODUCT_CATEGORY
+  CUSTOMER_GROUP
+}
+
+enum CommissionCalcMethod {
+  PERCENTAGE
+  FIXED
+}
+
+model CommissionPlan {
+  id             Int              @id @default(autoincrement())
+  organizationId Int
+  name           String
+  role           Role?
+  active         Boolean          @default(true)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  rules          CommissionRule[]
+  memberships    OrgMembership[]
+
+  @@unique([organizationId, name])
+  @@map("commission_plans")
+}
+
+model CommissionRule {
+  id           Int                   @id @default(autoincrement())
+  planId       Int?
+  membershipId Int?
+  basis        CommissionBasis
+  scopeType    CommissionScope
+  scopeValue   String?
+  calcMethod   CommissionCalcMethod
+  value        Decimal               @db.Decimal(10, 2)
+  validFrom    DateTime              @default(now())
+  validTo      DateTime?
+  label        String?
+  createdAt    DateTime              @default(now())
+
+  plan         CommissionPlan?       @relation(fields: [planId], references: [id], onDelete: Cascade)
+  membership   OrgMembership?        @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  commissions  Commission[]
+
+  @@index([planId])
+  @@index([membershipId])
+  @@map("commission_rules")
 }
