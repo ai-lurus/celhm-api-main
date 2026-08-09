@@ -69,3 +69,43 @@ describe('CommissionPlansService', () => {
     expect(result).toEqual({ id: 6 });
   });
 });
+
+describe('CommissionPlansService.preview', () => {
+  let service: CommissionPlansService;
+
+  const mockPrisma = {
+    orgMembership: { findFirst: jest.fn() },
+  };
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [CommissionPlansService, { provide: PrismaService, useValue: mockPrisma }],
+    }).compile();
+    service = module.get(CommissionPlansService);
+  });
+
+  it('reports the winning rule for GENERAL, each known product category, and each known customer group', async () => {
+    mockPrisma.orgMembership.findFirst.mockResolvedValue({
+      id: 1,
+      commissionPlan: {
+        active: true,
+        rules: [
+          { id: 1, scopeType: 'GENERAL', scopeValue: null, basis: 'SALE_TOTAL', calcMethod: 'PERCENTAGE', value: 5, validFrom: new Date('2026-01-01'), validTo: null },
+          { id: 2, scopeType: 'PRODUCT_CATEGORY', scopeValue: 'Accesorios', basis: 'SALE_TOTAL', calcMethod: 'PERCENTAGE', value: 2, validFrom: new Date('2026-01-01'), validTo: null },
+        ],
+      },
+      overrideRules: [],
+    });
+
+    const result = await service.preview(1, 1, new Date('2026-06-01'), ['Accesorios', 'Configuraciones'], []);
+
+    expect(result).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ scopeLabel: 'General', ruleId: 1, value: 5 }),
+        expect.objectContaining({ scopeLabel: 'Categoría: Accesorios', ruleId: 2, value: 2 }),
+        expect.objectContaining({ scopeLabel: 'Categoría: Configuraciones', ruleId: 1, value: 5 }),
+      ]),
+    );
+  });
+});

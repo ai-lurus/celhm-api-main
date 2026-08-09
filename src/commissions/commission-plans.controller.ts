@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Put, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Put, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -80,5 +80,15 @@ export class CommissionPlansController {
   @ApiOperation({ summary: 'Delete a rule, or close its validity if already used' })
   deleteRule(@CurrentUser() user: AuthUser, @Param('id', ParseIntPipe) id: number) {
     return this.plansService.deleteRule(id, user.organizationId);
+  }
+
+  @Get('rules/preview')
+  @ApiOperation({ summary: 'Preview which rule would win for an employee across known categories and customer groups' })
+  async preview(@CurrentUser() user: AuthUser, @Query('membershipId', ParseIntPipe) membershipId: number, @Query('date') date?: string) {
+    const [categories, groups] = await Promise.all([
+      this.plansService.listKnownCategories(user.organizationId),
+      this.plansService.listKnownCustomerGroupIds(user.organizationId),
+    ]);
+    return this.plansService.preview(membershipId, user.organizationId, date ? new Date(date) : new Date(), categories, groups);
   }
 }
