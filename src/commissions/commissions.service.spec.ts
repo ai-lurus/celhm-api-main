@@ -247,3 +247,60 @@ describe('CommissionsService.generateForSale', () => {
     });
   });
 });
+
+describe('CommissionsService.generateForReturn', () => {
+  let service: CommissionsService;
+
+  const mockPrisma = {
+    commission: { findFirst: jest.fn(), create: jest.fn() },
+    saleLine: { findUnique: jest.fn() },
+  };
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [CommissionsService, { provide: PrismaService, useValue: mockPrisma }],
+    }).compile();
+    service = module.get(CommissionsService);
+  });
+
+  it('creates a prorated negative commission mirroring the original rule', async () => {
+    mockPrisma.commission.findFirst.mockResolvedValue({
+      id: 1,
+      ruleId: 900,
+      ticketId: null,
+      userId: 10,
+      basis: 'SALE_TOTAL',
+      scopeLabel: 'Categoría: Accesorios',
+      isEstimated: false,
+      amount: 10,
+      rate: 5,
+      saleTotal: 200,
+    });
+    mockPrisma.saleLine.findUnique
+      .mockResolvedValueOnce({ id: 700, qty: 1 }) // return line
+      .mockResolvedValueOnce({ id: 501, qty: 2 }); // original line (qty 2, returning 1 = 50%)
+
+    await service.generateForReturn(99, new Map([[700, 501]]));
+
+    expect(mockPrisma.commission.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        saleId: 99,
+        saleLineId: 700,
+        userId: 10,
+        ruleId: 900,
+        amount: -5,
+        saleTotal: -100,
+        status: 'PENDIENTE',
+      }),
+    });
+  });
+
+  it('does nothing when the original line never earned a commission', async () => {
+    mockPrisma.commission.findFirst.mockResolvedValue(null);
+
+    await service.generateForReturn(99, new Map([[700, 501]]));
+
+    expect(mockPrisma.commission.create).not.toHaveBeenCalled();
+  });
+});

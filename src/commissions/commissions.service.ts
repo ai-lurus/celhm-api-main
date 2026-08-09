@@ -39,6 +39,48 @@ export class CommissionsService {
     }
   }
 
+  async generateForReturn(
+    returnSaleId: number,
+    originalLineIdByReturnLineId: Map<number, number>,
+  ): Promise<void> {
+    for (const [returnLineId, originalLineId] of originalLineIdByReturnLineId.entries()) {
+      try {
+        const originalCommission = await this.prisma.commission.findFirst({
+          where: { saleLineId: originalLineId },
+        });
+        if (!originalCommission) continue;
+
+        const [returnLine, originalLine] = await Promise.all([
+          this.prisma.saleLine.findUnique({ where: { id: returnLineId } }),
+          this.prisma.saleLine.findUnique({ where: { id: originalLineId } }),
+        ]);
+        if (!returnLine || !originalLine || originalLine.qty === 0) continue;
+
+        const refundRatio = returnLine.qty / originalLine.qty;
+        const negativeAmount = -Math.round(Number(originalCommission.amount) * refundRatio * 100) / 100;
+
+        await this.prisma.commission.create({
+          data: {
+            saleId: returnSaleId,
+            saleLineId: returnLine.id,
+            ticketId: originalCommission.ticketId,
+            userId: originalCommission.userId,
+            ruleId: originalCommission.ruleId,
+            basis: originalCommission.basis,
+            scopeLabel: originalCommission.scopeLabel,
+            isEstimated: originalCommission.isEstimated,
+            amount: negativeAmount,
+            rate: originalCommission.rate,
+            saleTotal: -Number(originalCommission.saleTotal) * refundRatio,
+            status: CommissionStatus.PENDIENTE,
+          },
+        });
+      } catch (error) {
+        this.logger.error(`Error generating return commission for return line ${returnLineId}:`, error);
+      }
+    }
+  }
+
   private async getCandidateRules(userId: number, organizationId: number): Promise<RuleCandidate[]> {
     const membership = await this.prisma.orgMembership.findUnique({
       where: { organizationId_userId: { organizationId, userId } },
