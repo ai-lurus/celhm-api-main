@@ -87,6 +87,9 @@ export class OrgService {
       if ('commissionRate' in data) {
         membershipUpdate.commissionRate = data.commissionRate ?? null;
       }
+      if ('commissionPlanId' in data) {
+        membershipUpdate.commissionPlanId = data.commissionPlanId ?? null;
+      }
       if (Object.keys(membershipUpdate).length > 0) {
         await tx.orgMembership.update({ where: { id: memberId }, data: membershipUpdate });
       }

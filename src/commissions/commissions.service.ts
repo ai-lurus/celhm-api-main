@@ -353,7 +353,7 @@ export class CommissionsService {
         email: true,
         memberships: {
           where: { organizationId },
-          select: { commissionRate: true },
+          select: { commissionRate: true, commissionPlan: { select: { id: true, name: true } } },
         },
         commissions: {
           select: {
@@ -380,6 +380,7 @@ export class CommissionsService {
         commissionRate: user.memberships[0]?.commissionRate
           ? Number(user.memberships[0].commissionRate)
           : null,
+        commissionPlanName: user.memberships[0]?.commissionPlan?.name ?? null,
         pendingAmount: pending,
         paidAmount: paid,
         totalAmount: total,
@@ -470,7 +471,7 @@ export class CommissionsService {
       orderBy: { createdAt: 'desc' },
     });
 
-    const header = 'ID,Técnico,Email,Ticket,Cliente,Dispositivo,Venta Folio,Subtotal Venta,Tasa (%),Monto Comisión,Estado,Fecha Creación,Fecha Pago\n';
+    const header = 'ID,Técnico,Email,Ticket,Cliente,Dispositivo,Venta Folio,Subtotal Venta,Tasa (%),Monto Comisión,Base,Alcance,Estimado,Estado,Fecha Creación,Fecha Pago\n';
     const rows = commissions.map((c) => {
       return [
         c.id,
@@ -483,6 +484,9 @@ export class CommissionsService {
         Number(c.saleTotal).toFixed(2),
         Number(c.rate).toFixed(2),
         Number(c.amount).toFixed(2),
+        c.basis || '',
+        `"${(c.scopeLabel || '').replace(/"/g, '""')}"`,
+        c.isEstimated ? 'Sí' : 'No',
         c.status,
         c.createdAt.toISOString(),
         c.paidAt ? c.paidAt.toISOString() : '',

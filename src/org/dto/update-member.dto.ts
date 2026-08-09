@@ -21,4 +21,10 @@ export class UpdateMemberDto {
   @Min(0)
   @Max(100)
   commissionRate?: number | null;
+
+  @ApiPropertyOptional({ description: 'Commission plan template id to assign to this member' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  commissionPlanId?: number | null;
 }
