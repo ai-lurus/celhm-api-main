@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - Modules organized by domain (`src/commissions/...`), business logic in Services, HTTP mapping only in Controllers — per `CLAUDE.md`.
-- Explicit return types on all Controller/Service methods.
+- Return types on Controller/Service methods follow the established repo convention: inferred from the Prisma call (no explicit annotation), matching every existing method in `commissions.service.ts` and `org.service.ts`. `CLAUDE.md` nominally asks for explicit return types, but no existing method has one — reviewers should not flag their absence as a defect.
 - No `console.log` — use NestJS `Logger`.
 - All DB writes stay in Prisma (no raw SQL) unless explicitly noted.
 - Every new/changed endpoint stays behind `@UseGuards(JwtAuthGuard, RolesGuard)` + `@Roles(Role.ADMINISTRADOR)`, matching the existing `CommissionsController`.
@@ -159,7 +159,7 @@ Expected: "Generated Prisma Client" with no errors.
 - [ ] **Step 5: Typecheck**
 
 Run: `pnpm typecheck`
-Expected: PASS (schema-only change, no application code touches the new fields yet).
+Expected: FAIL — `src/commissions/commissions.service.ts` references the old compound unique key `saleId_ticketId_userId` in its `findUnique` calls (inside `createCommissionForSale` / `createCommissionForProductSale`), which no longer exists now that `Commission`'s unique constraint changed to `[saleLineId, userId]`. This is expected — Task 4 deletes those two methods entirely and resolves the error. Confirm the only error reported is the `saleId_ticketId_userId` one in `commissions.service.ts` before moving on.
 
 - [ ] **Step 6: Commit**
 

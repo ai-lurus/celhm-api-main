@@ -42,8 +42,8 @@ describe('SalesService', () => {
   };
 
   const mockCommissionsService = {
-    createCommissionForSale: jest.fn(),
-    createCommissionForProductSale: jest.fn(),
+    generateForSale: jest.fn(),
+    generateForReturn: jest.fn(),
   };
 
   const mockCustomersService = {

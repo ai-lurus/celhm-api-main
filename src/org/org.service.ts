@@ -87,6 +87,16 @@ export class OrgService {
       if ('commissionRate' in data) {
         membershipUpdate.commissionRate = data.commissionRate ?? null;
       }
+      if ('commissionPlanId' in data) {
+        // Verify that the commission plan belongs to the same organization
+        if (data.commissionPlanId !== null && data.commissionPlanId !== undefined) {
+          const plan = await tx.commissionPlan.findFirst({
+            where: { id: data.commissionPlanId, organizationId: membership.organizationId },
+          });
+          if (!plan) throw new NotFoundException('Plan de comisión no encontrado');
+        }
+        membershipUpdate.commissionPlanId = data.commissionPlanId ?? null;
+      }
       if (Object.keys(membershipUpdate).length > 0) {
         await tx.orgMembership.update({ where: { id: memberId }, data: membershipUpdate });
       }

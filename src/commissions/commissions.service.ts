@@ -1,6 +1,7 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { CommissionStatus } from '@prisma/client';
+import { resolveCommissionRule, RuleCandidate } from './commission-rule-resolver';
 
 @Injectable()
 export class CommissionsService {
@@ -8,127 +9,219 @@ export class CommissionsService {
 
   constructor(private prisma: PrismaService) {}
 
-  /**
-   * Creates a commission record for a lab technician when a ticket sale is paid.
-   * Called from SalesService.create() when a sale with a ticketId is fully paid.
-   */
-  async createCommissionForSale(saleId: number, ticketId: number, saleSubtotal: number) {
-    // Look up the ticket to get the assigned technician (assignedUserId, fallback to userId) and the organizationId
-    const ticket = await this.prisma.ticket.findUnique({
-      where: { id: ticketId },
-      select: { 
-        assignedUserId: true, 
-        userId: true,
-        branch: { select: { organizationId: true } }
-      },
-    });
-
-    const technicianId = ticket?.assignedUserId || ticket?.userId;
-
-    if (!technicianId || !ticket?.branch?.organizationId) {
-      this.logger.warn(`Ticket ${ticketId} has no assigned user or organization — skipping commission`);
-      return null;
-    }
-
-    // Find the technician's commission rate from their OrgMembership (without role restriction)
-    const membership = await this.prisma.orgMembership.findUnique({
-      where: {
-        organizationId_userId: {
-          organizationId: ticket.branch.organizationId,
-          userId: technicianId,
+  async generateForSale(saleId: number): Promise<void> {
+    const sale = await this.prisma.sale.findUnique({
+      where: { id: saleId },
+      include: {
+        branch: { select: { organizationId: true } },
+        customer: { select: { groupId: true } },
+        lines: {
+          include: {
+            variant: { include: { product: true } },
+            ticket: { select: { id: true, assignedUserId: true, userId: true, finalCost: true } },
+          },
         },
       },
-      select: { commissionRate: true },
     });
 
-    if (!membership?.commissionRate || Number(membership.commissionRate) <= 0) {
-      this.logger.log(`User ${technicianId} has no commission rate configured — skipping`);
-      return null;
+    if (!sale || !sale.branch) return;
+
+    const organizationId = sale.branch.organizationId;
+    const customerGroupId = sale.customer?.groupId ?? null;
+    const candidateCache = new Map<number, RuleCandidate[]>();
+
+    for (const line of sale.lines) {
+      try {
+        await this.generateForLine(line, sale, organizationId, customerGroupId, candidateCache);
+      } catch (error) {
+        this.logger.error(`Error generating commission for sale line ${line.id}:`, error);
+      }
     }
-
-    const rate = Number(membership.commissionRate);
-    const amount = Math.round((saleSubtotal * rate) / 100 * 100) / 100; // Round to 2 decimals
-
-    // Prevent duplicate commissions (upsert by saleId+ticketId+userId unique constraint)
-    const existing = await this.prisma.commission.findUnique({
-      where: {
-        saleId_ticketId_userId: { saleId, ticketId, userId: technicianId },
-      },
-    });
-
-    if (existing) {
-      this.logger.warn(`Commission already exists for sale ${saleId} and user ${technicianId}`);
-      return existing;
-    }
-
-    const commission = await this.prisma.commission.create({
-      data: {
-        saleId,
-        ticketId,
-        userId: technicianId,
-        amount,
-        rate,
-        saleTotal: saleSubtotal,
-        status: CommissionStatus.PENDIENTE,
-      },
-    });
-
-    this.logger.log(
-      `Commission created: $${amount} (${rate}% of $${saleSubtotal}) for user ${technicianId} on sale ${saleId}`,
-    );
-
-    return commission;
   }
 
-  async createCommissionForProductSale(saleId: number, userId: number, organizationId: number, saleSubtotal: number) {
+  async generateForReturn(
+    returnSaleId: number,
+    originalLineIdByReturnLineId: Map<number, number>,
+  ): Promise<void> {
+    for (const [returnLineId, originalLineId] of originalLineIdByReturnLineId.entries()) {
+      try {
+        const originalCommission = await this.prisma.commission.findFirst({
+          where: { saleLineId: originalLineId },
+        });
+        if (!originalCommission) continue;
+
+        const [returnLine, originalLine] = await Promise.all([
+          this.prisma.saleLine.findUnique({ where: { id: returnLineId } }),
+          this.prisma.saleLine.findUnique({ where: { id: originalLineId } }),
+        ]);
+        if (!returnLine || !originalLine || originalLine.qty === 0) continue;
+
+        const refundRatio = returnLine.qty / originalLine.qty;
+        const negativeAmount = -Math.round(Number(originalCommission.amount) * refundRatio * 100) / 100;
+
+        await this.prisma.commission.create({
+          data: {
+            saleId: returnSaleId,
+            saleLineId: returnLine.id,
+            ticketId: originalCommission.ticketId,
+            userId: originalCommission.userId,
+            ruleId: originalCommission.ruleId,
+            basis: originalCommission.basis,
+            scopeLabel: originalCommission.scopeLabel,
+            isEstimated: originalCommission.isEstimated,
+            amount: negativeAmount,
+            rate: originalCommission.rate,
+            saleTotal: -Number(originalCommission.saleTotal) * refundRatio,
+            status: CommissionStatus.PENDIENTE,
+          },
+        });
+      } catch (error) {
+        this.logger.error(`Error generating return commission for return line ${returnLineId}:`, error);
+      }
+    }
+  }
+
+  private async getCandidateRules(userId: number, organizationId: number): Promise<RuleCandidate[]> {
     const membership = await this.prisma.orgMembership.findUnique({
-      where: {
-        organizationId_userId: {
-          organizationId: organizationId,
-          userId: userId,
-        },
-      },
-      select: { commissionRate: true },
-    });
-
-    if (!membership?.commissionRate || Number(membership.commissionRate) <= 0) {
-      this.logger.log(`User ${userId} has no commission rate configured — skipping product commission`);
-      return null;
-    }
-
-    const rate = Number(membership.commissionRate);
-    const amount = Math.round((saleSubtotal * rate) / 100 * 100) / 100;
-
-    const existing = await this.prisma.commission.findFirst({
-      where: {
-        saleId,
-        userId,
-        ticketId: null,
+      where: { organizationId_userId: { organizationId, userId } },
+      include: {
+        commissionPlan: { include: { rules: true } },
+        overrideRules: true,
       },
     });
 
-    if (existing) {
-      this.logger.warn(`Product commission already exists for sale ${saleId} and user ${userId}`);
-      return existing;
+    if (!membership) return [];
+
+    const planRules: RuleCandidate[] = (
+      membership.commissionPlan?.active ? membership.commissionPlan.rules : []
+    ).map((r) => ({
+      id: r.id,
+      source: 'PLAN' as const,
+      scopeType: r.scopeType,
+      scopeValue: r.scopeValue,
+      basis: r.basis,
+      calcMethod: r.calcMethod,
+      value: Number(r.value),
+      validFrom: r.validFrom,
+      validTo: r.validTo,
+    }));
+
+    const overrideRules: RuleCandidate[] = membership.overrideRules.map((r) => ({
+      id: r.id,
+      source: 'OVERRIDE' as const,
+      scopeType: r.scopeType,
+      scopeValue: r.scopeValue,
+      basis: r.basis,
+      calcMethod: r.calcMethod,
+      value: Number(r.value),
+      validFrom: r.validFrom,
+      validTo: r.validTo,
+    }));
+
+    return [...planRules, ...overrideRules];
+  }
+
+  private async generateForLine(
+    line: any,
+    sale: any,
+    organizationId: number,
+    customerGroupId: number | null,
+    candidateCache: Map<number, RuleCandidate[]>,
+  ): Promise<void> {
+    let responsibleUserId: number | null = null;
+    let productCategory: string | null = null;
+    let saleTotalBase = Number(line.total);
+    let profitBase = Number(line.total);
+    let isEstimated = false;
+
+    if (line.ticketId && line.ticket) {
+      responsibleUserId = line.ticket.assignedUserId ?? line.ticket.userId ?? null;
+      const parts = await this.prisma.ticketPart.findMany({
+        where: { ticketId: line.ticketId },
+        include: { variant: true },
+      });
+      let cost = 0;
+      for (const part of parts) {
+        if (part.variant.purchasePrice === null) {
+          isEstimated = true;
+        } else {
+          cost += Number(part.variant.purchasePrice) * part.qty;
+        }
+      }
+      profitBase = Number(line.total) - cost;
+    } else if (line.variantId && line.variant) {
+      responsibleUserId = sale.userId;
+      productCategory = line.variant.product?.category ?? null;
+      const purchasePrice = line.variant.purchasePrice;
+      if (purchasePrice === null) {
+        isEstimated = true;
+      } else {
+        profitBase = Number(line.total) - Number(purchasePrice) * line.qty;
+      }
+    } else {
+      responsibleUserId = sale.userId;
     }
 
-    const commission = await this.prisma.commission.create({
+    if (!responsibleUserId) return;
+
+    if (!candidateCache.has(responsibleUserId)) {
+      candidateCache.set(responsibleUserId, await this.getCandidateRules(responsibleUserId, organizationId));
+    }
+    const candidates = candidateCache.get(responsibleUserId)!;
+    if (candidates.length === 0) return;
+
+    const result = resolveCommissionRule(candidates, {
+      date: sale.createdAt,
+      productCategory,
+      customerGroupId,
+    });
+
+    if (!result) return;
+    if (result.hadTie) {
+      this.logger.warn(
+        `Multiple equally-specific commission rules matched for user ${responsibleUserId} on sale ${sale.id} line ${line.id}; using the most recently created one`,
+      );
+    }
+
+    const { rule } = result;
+    const baseAmount = rule.basis === 'PROFIT' ? profitBase : saleTotalBase;
+    const amount =
+      rule.calcMethod === 'PERCENTAGE'
+        ? Math.round(((baseAmount * rule.value) / 100) * 100) / 100
+        : rule.value;
+
+    const scopeLabel =
+      rule.scopeType === 'GENERAL'
+        ? 'General'
+        : rule.scopeType === 'PRODUCT_CATEGORY'
+          ? `Categoría: ${productCategory ?? rule.scopeValue}`
+          : `Cliente: grupo ${rule.scopeValue}`;
+
+    const existing = await this.prisma.commission.findUnique({
+      where: { saleLineId_userId: { saleLineId: line.id, userId: responsibleUserId } },
+    });
+    if (existing) return;
+
+    await this.prisma.commission.create({
       data: {
-        saleId,
-        ticketId: null,
-        userId,
+        saleId: sale.id,
+        saleLineId: line.id,
+        ticketId: line.ticketId ?? null,
+        userId: responsibleUserId,
+        ruleId: rule.id,
+        basis: rule.basis,
+        scopeLabel,
+        isEstimated,
         amount,
-        rate,
-        saleTotal: saleSubtotal,
+        rate: rule.calcMethod === 'PERCENTAGE' ? rule.value : 0,
+        saleTotal: baseAmount,
         status: CommissionStatus.PENDIENTE,
       },
     });
 
     this.logger.log(
-      `Product commission created: $${amount} (${rate}% of $${saleSubtotal}) for user ${userId} on sale ${saleId}`,
+      `Commission created: $${amount} (${scopeLabel}, ${rule.basis}) for user ${responsibleUserId} on sale ${sale.id} line ${line.id}`,
     );
-
-    return commission;
   }
 
   async findAll(organizationId: number, filters?: {
@@ -260,7 +353,7 @@ export class CommissionsService {
         email: true,
         memberships: {
           where: { organizationId },
-          select: { commissionRate: true },
+          select: { commissionRate: true, commissionPlan: { select: { id: true, name: true } } },
         },
         commissions: {
           select: {
@@ -287,6 +380,7 @@ export class CommissionsService {
         commissionRate: user.memberships[0]?.commissionRate
           ? Number(user.memberships[0].commissionRate)
           : null,
+        commissionPlanName: user.memberships[0]?.commissionPlan?.name ?? null,
         pendingAmount: pending,
         paidAmount: paid,
         totalAmount: total,
@@ -377,7 +471,7 @@ export class CommissionsService {
       orderBy: { createdAt: 'desc' },
     });
 
-    const header = 'ID,Técnico,Email,Ticket,Cliente,Dispositivo,Venta Folio,Subtotal Venta,Tasa (%),Monto Comisión,Estado,Fecha Creación,Fecha Pago\n';
+    const header = 'ID,Técnico,Email,Ticket,Cliente,Dispositivo,Venta Folio,Subtotal Venta,Tasa (%),Monto Comisión,Base,Alcance,Estimado,Estado,Fecha Creación,Fecha Pago\n';
     const rows = commissions.map((c) => {
       return [
         c.id,
@@ -390,6 +484,9 @@ export class CommissionsService {
         Number(c.saleTotal).toFixed(2),
         Number(c.rate).toFixed(2),
         Number(c.amount).toFixed(2),
+        c.basis || '',
+        `"${(c.scopeLabel || '').replace(/"/g, '""')}"`,
+        c.isEstimated ? 'Sí' : 'No',
         c.status,
         c.createdAt.toISOString(),
         c.paidAt ? c.paidAt.toISOString() : '',
