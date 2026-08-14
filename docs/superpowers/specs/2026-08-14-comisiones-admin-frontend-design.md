@@ -36,20 +36,22 @@ selector de `commissionRate` plano en el modal de edición de
 Incluye: CRUD de planes de comisión, CRUD de reglas dentro de un plan,
 creación/listado de overrides individuales por empleado, panel de preview de
 regla ganadora, y selector de plan de comisión en el modal de edición de
-usuario. Un endpoint nuevo en el backend para listar overrides (gap
-descubierto durante el diseño).
+usuario. Dos endpoints nuevos en el backend (listar overrides, listar
+categorías conocidas) — gaps descubiertos durante el diseño.
 
 Fuera de alcance: tocar el flujo de cálculo/generación automática de
 `Commission` (ya funciona), cambios al listado/pago existente en
 `/dashboard/commissions`, quitar `commissionRate` del schema (sigue
 coexistiendo como mecanismo alterno más simple).
 
-## A. Cambio de backend (`celhm-api-main`)
+## A. Cambios de backend (`celhm-api-main`)
 
-Gap: no hay forma de listar los overrides ya creados de un empleado (solo
-crearlos vía `POST /commissions/rules/override`, o inferir el ganador vía
-`preview`). Sin listado, el FE no puede revisar/eliminar overrides
-existentes.
+Dos gaps descubiertos durante el diseño:
+
+**A.1 — Listar overrides de un empleado.** No hay forma de listar los
+overrides ya creados (solo crearlos vía `POST /commissions/rules/override`,
+o inferir el ganador vía `preview`). Sin listado, el FE no puede
+revisar/eliminar overrides existentes.
 
 Agregar a `CommissionPlansController` / `CommissionPlansService`:
 
@@ -63,6 +65,27 @@ GET /commissions/rules/overrides?membershipId=123
 - Implementación: `prisma.commissionRule.findMany({ where: { membershipId } })`
   (reutiliza la relación `overrideRules` ya usada en `preview()`).
 - Retorna `CommissionRule[]` sin transformar.
+
+**A.2 — Listar categorías válidas para scope `PRODUCT_CATEGORY`.** El
+`scopeValue` de una regla con `scopeType = PRODUCT_CATEGORY` se compara
+(case-insensitive) contra `Product.category`, un campo de **texto libre**
+legacy — no contra el catálogo jerárquico `ProductCategory` (el que expone
+`GET /catalog/categories`, usado en otras partes del FE). El backend ya
+calcula los valores distintos de `Product.category` en
+`listKnownCategories()`, pero solo internamente dentro de `preview()`, sin
+endpoint propio. Sin esto, el admin tendría que escribir la categoría a mano
+en un `<input>`, con riesgo de typos que hacen que la regla nunca matchee
+silenciosamente.
+
+Agregar:
+
+```
+GET /commissions/categories
+```
+
+- Mismo guard (`@Roles(Role.ADMINISTRADOR)`).
+- Llama a `listKnownCategories(organizationId)` (ya existe, sin cambios) y
+  retorna el `string[]` tal cual.
 
 No se toca nada más del backend. `commissionPlanId` de `OrgMembership` ya
 viaja en `GET /orgs/members` (Prisma incluye scalars por default al no usar
@@ -113,6 +136,10 @@ Queries/mutations (TanStack Query, mismo patrón que `useCustomerGroups.ts`):
 - `useCommissionOverrides(membershipId)` → `GET /commissions/rules/overrides?membershipId=`
 - `useCreateCommissionOverride()` → `POST /commissions/rules/override`
 - `useCommissionRulePreview(membershipId, date)` → `GET /commissions/rules/preview`
+- `useCommissionCategories()` → `GET /commissions/categories` (valores de
+  `Product.category`, para el `<select>` de `scopeType = PRODUCT_CATEGORY`;
+  **no** confundir con `useCategories()` de `useCatalog.ts`, que es un
+  catálogo distinto)
 
 Todas las mutations invalidan `['commission-plans']`; las de override también
 invalidan `['commission-overrides', membershipId]`.
@@ -121,7 +148,6 @@ invalidan `['commission-overrides', membershipId]`.
 
 - `useUsers()` (`src/lib/hooks/useUsers.ts`) — lista de `OrgMember` con `id`
   (membershipId), para selectores de empleado en Overrides y Preview.
-- `useCategories()` de `useCatalog.ts` — para `scopeType = PRODUCT_CATEGORY`.
 - `useCustomerGroups()` — para `scopeType = CUSTOMER_GROUP`.
 
 ### Cambios a hooks existentes
@@ -160,10 +186,11 @@ modal; el plan queda visible con badge "Inactivo" en vez de desaparecer.
   Basis, Cálculo (ej. "10%" o "$10 fijo"), Vigencia (`validFrom`–`validTo` o
   "Vigente"), Acciones (Revisar / Eliminar).
 - "Agregar regla": `basis` (select), `scopeType` (select) — al elegir
-  `PRODUCT_CATEGORY` muestra `<select>` poblado con `useCategories()`; al
-  elegir `CUSTOMER_GROUP` muestra `<select>` con `useCustomerGroups()`
-  (envía `String(id)`); más `calcMethod`, `value`, `label` opcional.
-  `validFrom` no es editable (usa el default del backend = ahora).
+  `PRODUCT_CATEGORY` muestra `<select>` poblado con `useCommissionCategories()`
+  (valores de `Product.category`, texto libre); al elegir `CUSTOMER_GROUP`
+  muestra `<select>` con `useCustomerGroups()` (envía `String(id)`); más
+  `calcMethod`, `value`, `label` opcional. `validFrom` no es editable (usa el
+  default del backend = ahora).
 - "Revisar": modal reducido (`calcMethod`, `value`, `label`, igual que
   `ReviseCommissionRuleDto`) con nota explicando que cierra la regla vigente
   y crea una nueva desde hoy.
@@ -211,9 +238,10 @@ No se necesita permiso nuevo — el backend ya restringe estas rutas a
   keys, invalidaciones, payloads enviados). Component tests ligeros de
   `RuleFormModal` (deshabilita guardar sin `scopeValue`; cambia campos según
   `scopeType`) y `PlanFormModal`.
-- Backend: unit test del nuevo `GET /commissions/rules/overrides` en
-  `commission-plans.service.spec.ts` — membership de otra organización → 404;
-  retorna solo reglas de esa membership.
+- Backend: unit tests de los dos endpoints nuevos en
+  `commission-plans.service.spec.ts` — `overrides`: membership de otra
+  organización → 404, retorna solo reglas de esa membership; `categories`:
+  retorna valores distintos de `Product.category`, sin duplicados ni nulls.
 - Verificación manual: correr `pnpm dev` en ambos repos y probar el flujo
   completo (crear plan → agregar regla por categoría → asignar plan a un
   empleado → crear override → preview) antes de dar el trabajo por
