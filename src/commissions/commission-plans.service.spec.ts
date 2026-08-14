@@ -8,7 +8,8 @@ describe('CommissionPlansService', () => {
 
   const mockPrisma = {
     commissionPlan: { findMany: jest.fn(), create: jest.fn(), findFirst: jest.fn(), update: jest.fn() },
-    commissionRule: { create: jest.fn(), findFirst: jest.fn(), update: jest.fn(), delete: jest.fn(), count: jest.fn() },
+    commissionRule: { create: jest.fn(), findFirst: jest.fn(), update: jest.fn(), delete: jest.fn(), count: jest.fn(), findMany: jest.fn() },
+    orgMembership: { findFirst: jest.fn() },
   };
 
   beforeEach(async () => {
@@ -67,6 +68,25 @@ describe('CommissionPlansService', () => {
       data: expect.objectContaining({ planId: 2, membershipId: null, value: 8 }),
     });
     expect(result).toEqual({ id: 6 });
+  });
+
+  it('lists override rules for a membership in the caller org', async () => {
+    mockPrisma.orgMembership.findFirst.mockResolvedValue({ id: 9, organizationId: 1 });
+    mockPrisma.commissionRule.findMany.mockResolvedValue([{ id: 1, membershipId: 9 }]);
+
+    const result = await service.listOverrides(9, 1);
+
+    expect(mockPrisma.orgMembership.findFirst).toHaveBeenCalledWith({ where: { id: 9, organizationId: 1 } });
+    expect(mockPrisma.commissionRule.findMany).toHaveBeenCalledWith({
+      where: { membershipId: 9 },
+      orderBy: { createdAt: 'desc' },
+    });
+    expect(result).toEqual([{ id: 1, membershipId: 9 }]);
+  });
+
+  it('throws NotFoundException when listing overrides for a membership outside the org', async () => {
+    mockPrisma.orgMembership.findFirst.mockResolvedValue(null);
+    await expect(service.listOverrides(9, 1)).rejects.toThrow(NotFoundException);
   });
 });
 

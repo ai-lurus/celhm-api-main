@@ -66,6 +66,12 @@ export class CommissionPlansController {
     return this.plansService.createOverride(user.organizationId, dto);
   }
 
+  @Get('rules/overrides')
+  @ApiOperation({ summary: 'List individual commission rule overrides for one employee' })
+  listOverrides(@CurrentUser() user: AuthUser, @Query('membershipId', ParseIntPipe) membershipId: number) {
+    return this.plansService.listOverrides(membershipId, user.organizationId);
+  }
+
   @Put('rules/:id/revise')
   @ApiOperation({ summary: 'Close a rule effective now and create a new one with the updated value' })
   reviseRule(

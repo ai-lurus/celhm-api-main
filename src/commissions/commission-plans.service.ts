@@ -72,6 +72,18 @@ export class CommissionPlansService {
     });
   }
 
+  async listOverrides(membershipId: number, organizationId: number) {
+    const membership = await this.prisma.orgMembership.findFirst({
+      where: { id: membershipId, organizationId },
+    });
+    if (!membership) throw new NotFoundException('Empleado no encontrado en tu organización');
+
+    return this.prisma.commissionRule.findMany({
+      where: { membershipId },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
   async reviseRule(ruleId: number, organizationId: number, dto: ReviseCommissionRuleDto) {
     const rule = await this.findRuleInOrg(ruleId, organizationId);
 
