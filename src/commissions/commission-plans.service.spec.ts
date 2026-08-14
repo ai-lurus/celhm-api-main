@@ -129,3 +129,32 @@ describe('CommissionPlansService.preview', () => {
     );
   });
 });
+
+describe('CommissionPlansService.listKnownCategories', () => {
+  let service: CommissionPlansService;
+
+  const mockPrisma = {
+    product: { findMany: jest.fn() },
+  };
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [CommissionPlansService, { provide: PrismaService, useValue: mockPrisma }],
+    }).compile();
+    service = module.get(CommissionPlansService);
+  });
+
+  it('returns distinct non-null product categories for the organization', async () => {
+    mockPrisma.product.findMany.mockResolvedValue([{ category: 'Accesorios' }, { category: 'Pantallas' }]);
+
+    const result = await service.listKnownCategories(1);
+
+    expect(mockPrisma.product.findMany).toHaveBeenCalledWith({
+      where: { deletedAt: null, category: { not: null } },
+      select: { category: true },
+      distinct: ['category'],
+    });
+    expect(result).toEqual(['Accesorios', 'Pantallas']);
+  });
+});

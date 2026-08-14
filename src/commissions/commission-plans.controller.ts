@@ -28,6 +28,12 @@ export class CommissionPlansController {
     return this.plansService.findAll(user.organizationId);
   }
 
+  @Get('categories')
+  @ApiOperation({ summary: 'List distinct product categories usable as PRODUCT_CATEGORY rule scope' })
+  listCategories(@CurrentUser() user: AuthUser): Promise<string[]> {
+    return this.plansService.listKnownCategories(user.organizationId);
+  }
+
   @Post('plans')
   @ApiOperation({ summary: 'Create a commission plan template' })
   create(@CurrentUser() user: AuthUser, @Body() dto: CreateCommissionPlanDto) {
