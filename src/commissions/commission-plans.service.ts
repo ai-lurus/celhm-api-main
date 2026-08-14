@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { CommissionRule } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { CreateCommissionPlanDto, UpdateCommissionPlanDto } from './dto/commission-plan.dto';
 import {
@@ -72,7 +73,7 @@ export class CommissionPlansService {
     });
   }
 
-  async listOverrides(membershipId: number, organizationId: number) {
+  async listOverrides(membershipId: number, organizationId: number): Promise<CommissionRule[]> {
     const membership = await this.prisma.orgMembership.findFirst({
       where: { id: membershipId, organizationId },
     });

@@ -5,7 +5,7 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthUser } from '../auth/auth.service';
-import { Role } from '@prisma/client';
+import { Role, CommissionRule } from '@prisma/client';
 import { CommissionPlansService } from './commission-plans.service';
 import { CreateCommissionPlanDto, UpdateCommissionPlanDto } from './dto/commission-plan.dto';
 import {
@@ -68,7 +68,7 @@ export class CommissionPlansController {
 
   @Get('rules/overrides')
   @ApiOperation({ summary: 'List individual commission rule overrides for one employee' })
-  listOverrides(@CurrentUser() user: AuthUser, @Query('membershipId', ParseIntPipe) membershipId: number) {
+  listOverrides(@CurrentUser() user: AuthUser, @Query('membershipId', ParseIntPipe) membershipId: number): Promise<CommissionRule[]> {
     return this.plansService.listOverrides(membershipId, user.organizationId);
   }
 
