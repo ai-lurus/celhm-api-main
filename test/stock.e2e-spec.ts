@@ -54,12 +54,13 @@ describe('StockController (e2e)', () => {
         .send({ email: 'direccion@acme-repair.com', password: 'ChangeMe123!' });
       adminAccessToken = loginResponse.body.access_token;
 
-      // Create a test category for this test
+      // Create a test category for this test with unique name
+      const uniqueCategoryName = `E2E Test Category ${Date.now()}`;
       const categoryResponse = await request(app.getHttpServer())
         .post('/catalog/categories')
         .set('Authorization', `Bearer ${adminAccessToken}`)
         .send({
-          name: 'E2E Test Category',
+          name: uniqueCategoryName,
         })
         .expect(201);
 
