@@ -145,6 +145,47 @@ Productos con `categoryId = null` no obtienen sugerencia automática de SKU
 (el campo queda vacío para llenado manual) hasta que se les asigne
 categoría.
 
+## Impacto adicional detectado al planear (consumidores de `Product.category`)
+
+Al mapear el archivo exacto de cada cambio se encontraron consumidores de
+`Product.category` (string) no mencionados arriba, que la migración a
+`categoryId` rompe si no se adaptan en el mismo cambio:
+
+- **Comisiones por categoría** (`commissions/commission-plans.service.ts:185-192`
+  `listKnownCategories`, y `commissions/commissions.service.ts:154`
+  `generateForLine`): `CommissionRule` con `scopeType: PRODUCT_CATEGORY`
+  matchea por el nombre de categoría (string) contra
+  `line.variant.product?.category`. Pasan a leer
+  `product.category?.name` vía la relación (mismo criterio de matching,
+  solo cambia de dónde sale el string). Requiere que el `include` de
+  `commissions.service.ts:20` (`variant: { include: { product: true } }`)
+  agregue `product: { include: { category: true } }`, y que
+  `listKnownCategories` filtre/seleccione por `categoryId`/`category.name`
+  en vez de `category`. Sus specs (`commission-plans.service.spec.ts`,
+  `commissions.service.spec.ts`) usan mocks con `category: 'Accesorios'`
+  como string plano y se actualizan a `category: { name: 'Accesorios' }`.
+- **Filtro de Inventario por categoría** (`stock.service.ts:61-72`,
+  parámetro `categoriaId` en `stock.controller.ts:32`): hoy, pese al
+  nombre `categoriaId`, filtra con `contains` sobre el string
+  `product.category` (bug preexistente de nombre engañoso). Se aprovecha
+  la migración para que filtre de verdad por `product.categoryId`
+  (igualdad exacta) — es una corrección natural del mismo cambio, no una
+  ampliación de alcance funcional.
+- **`stock.service.ts:133-141`** (`select` de `product` en `getStock`):
+  cambia `category: true` (escalar) por
+  `category: { select: { id: true, name: true } }` (relación).
+- **Paquete compartido `@celhm/types`** (`packages/types/src/catalog.ts`,
+  `packages/types/src/stock.ts`): los schemas Zod de `Product`/`Variant`/
+  `StockItem` tienen `category: z.string().optional()` embebido; pasan a
+  `categoryId: z.number().nullable().optional()` +
+  `category: z.object({ id: z.number(), name: z.string() }).nullable().optional()`.
+  (`packages/types/src/movements.ts:28` también tiene un campo `category`
+  string, pero el backend de movimientos nunca lo puebla hoy — no se
+  toca, es un campo de tipo ya inerte.)
+- **`useStock.ts:42`**: ya existe un `categoryId: number` en
+  `InventoryItem` con `// TODO: Get from product.category when
+  available` — esta migración es exactamente lo que resuelve ese TODO.
+
 ## Backend (`celhm-api-main`)
 
 ### Nuevo módulo `SkuModule`
