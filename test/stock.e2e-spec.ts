@@ -46,33 +46,27 @@ describe('StockController (e2e)', () => {
 
   describe('/stock/items (POST)', () => {
     let adminAccessToken: string;
+    let categoryId: number;
 
     beforeEach(async () => {
       const loginResponse = await request(app.getHttpServer())
         .post('/auth/login')
         .send({ email: 'direccion@acme-repair.com', password: 'ChangeMe123!' });
       adminAccessToken = loginResponse.body.access_token;
+
+      // Create a test category for this test
+      const categoryResponse = await request(app.getHttpServer())
+        .post('/catalog/categories')
+        .set('Authorization', `Bearer ${adminAccessToken}`)
+        .send({
+          name: 'E2E Test Category',
+        })
+        .expect(201);
+
+      categoryId = categoryResponse.body.id;
     });
 
     it('auto-generates a mask-based sku when none is provided', async () => {
-      const categoriesResponse = await request(app.getHttpServer())
-        .get('/catalog/categories')
-        .set('Authorization', `Bearer ${adminAccessToken}`);
-
-      // Get a valid category ID - use first top-level category or first child
-      let categoryId: number;
-      if (Array.isArray(categoriesResponse.body) && categoriesResponse.body.length > 0) {
-        const firstCategory = categoriesResponse.body[0];
-        if (firstCategory.children && firstCategory.children.length > 0) {
-          categoryId = firstCategory.children[0].id;
-        } else {
-          categoryId = firstCategory.id;
-        }
-      } else {
-        // Skip test if no categories exist
-        return;
-      }
-
       const response = await request(app.getHttpServer())
         .post('/stock/items')
         .set('Authorization', `Bearer ${adminAccessToken}`)
