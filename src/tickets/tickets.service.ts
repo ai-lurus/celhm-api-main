@@ -510,8 +510,9 @@ export class TicketsService {
       throw new Error('Ticket part not found');
     }
 
-    // Use batch transaction for atomic stock restoration, part deletion and movement
-    await this.prisma.$transaction([
+    // Use batch transaction for atomic stock restoration, part deletion, movement,
+    // and (when the part's cost was included) reversing the ticket's finalCost.
+    const operations: any[] = [
       this.prisma.stock.updateMany({
         where: {
           branchId: ticketPart.ticket.branchId,
@@ -542,7 +543,20 @@ export class TicketsService {
           userAgent,
         },
       }),
-    ]);
+    ];
+
+    if (ticketPart.costIncluded && ticketPart.unitCost !== null) {
+      const amount = Number(ticketPart.unitCost) * ticketPart.qty;
+      const newFinalCost = Math.max(0, Number(ticketPart.ticket.finalCost ?? 0) - amount);
+      operations.push(
+        this.prisma.ticket.update({
+          where: { id },
+          data: { finalCost: newFinalCost },
+        }),
+      );
+    }
+
+    await this.prisma.$transaction(operations as any);
 
     return { success: true };
   }

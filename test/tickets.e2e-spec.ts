@@ -251,5 +251,94 @@ describe('TicketsController (e2e)', () => {
       expect(Number(ticketResponse.body.finalCost)).toBeCloseTo(variantPrice * 2, 2);
     }, 10000);
   });
+
+  describe('/tickets/:id/piezas/:partId (DELETE)', () => {
+    let ticketId: number;
+    let variantId: number;
+    let variantPrice: number;
+
+    beforeEach(async () => {
+      const createResponse = await request(app.getHttpServer())
+        .post('/tickets')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({
+          branchId: 1,
+          customerName: 'Test Customer',
+          device: 'iPhone 12',
+          problem: 'Necesita pieza',
+        });
+      ticketId = createResponse.body.id;
+
+      const stockResponse = await request(app.getHttpServer())
+        .get('/stock')
+        .set('Authorization', `Bearer ${accessToken}`);
+      const stockItem = stockResponse.body.data[0];
+      variantId = stockItem.variant.id;
+      variantPrice = Number(stockItem.variant.price);
+    });
+
+    it('restores finalCost to 0 when removing the only part whose cost was included', async () => {
+      const addResponse = await request(app.getHttpServer())
+        .post(`/tickets/${ticketId}/piezas`)
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({ variantId, qty: 1, includeCost: true })
+        .expect(201);
+
+      await request(app.getHttpServer())
+        .delete(`/tickets/${ticketId}/piezas/${addResponse.body.id}`)
+        .set('Authorization', `Bearer ${accessToken}`)
+        .expect(200);
+
+      const ticketResponse = await request(app.getHttpServer())
+        .get(`/tickets/${ticketId}`)
+        .set('Authorization', `Bearer ${accessToken}`);
+
+      expect(Number(ticketResponse.body.finalCost)).toBe(0);
+    });
+
+    it('leaves finalCost unchanged when removing a part whose cost was not included', async () => {
+      const addResponse = await request(app.getHttpServer())
+        .post(`/tickets/${ticketId}/piezas`)
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({ variantId, qty: 1 })
+        .expect(201);
+
+      await request(app.getHttpServer())
+        .delete(`/tickets/${ticketId}/piezas/${addResponse.body.id}`)
+        .set('Authorization', `Bearer ${accessToken}`)
+        .expect(200);
+
+      const ticketResponse = await request(app.getHttpServer())
+        .get(`/tickets/${ticketId}`)
+        .set('Authorization', `Bearer ${accessToken}`);
+
+      expect(ticketResponse.body.finalCost ?? null).toBeNull();
+    });
+
+    it('floors finalCost at 0 if it was manually lowered below the part cost before removal', async () => {
+      const addResponse = await request(app.getHttpServer())
+        .post(`/tickets/${ticketId}/piezas`)
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({ variantId, qty: 1, includeCost: true })
+        .expect(201);
+
+      await request(app.getHttpServer())
+        .patch(`/tickets/${ticketId}`)
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({ finalCost: variantPrice / 2 })
+        .expect(200);
+
+      await request(app.getHttpServer())
+        .delete(`/tickets/${ticketId}/piezas/${addResponse.body.id}`)
+        .set('Authorization', `Bearer ${accessToken}`)
+        .expect(200);
+
+      const ticketResponse = await request(app.getHttpServer())
+        .get(`/tickets/${ticketId}`)
+        .set('Authorization', `Bearer ${accessToken}`);
+
+      expect(Number(ticketResponse.body.finalCost)).toBe(0);
+    });
+  });
 });
 
