@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsOptional, IsBoolean } from 'class-validator';
+import { IsString, IsOptional, IsBoolean, IsInt } from 'class-validator';
 
 export class CreateProductDto {
   @ApiProperty({ description: 'Product name' })
@@ -12,10 +12,10 @@ export class CreateProductDto {
   @IsString()
   description?: string;
 
-  @ApiPropertyOptional({ description: 'Product category' })
+  @ApiPropertyOptional({ description: 'Product category ID' })
   @IsOptional()
-  @IsString()
-  category?: string;
+  @IsInt()
+  categoryId?: number;
 
   @ApiPropertyOptional({ description: 'Product brand' })
   @IsOptional()

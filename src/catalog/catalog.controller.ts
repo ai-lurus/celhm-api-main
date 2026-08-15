@@ -3,6 +3,8 @@ import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@ne
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { AuthUser } from '../auth/auth.service';
 import { Role } from '@prisma/client';
 import { CatalogService } from './catalog.service';
 import { CreateProductDto } from './dto/create-product.dto';
@@ -114,8 +116,11 @@ export class CatalogController {
   @ApiOperation({ summary: 'Create new variant' })
   @ApiResponse({ status: 201, description: 'Variant created successfully' })
   @ApiResponse({ status: 400, description: 'Invalid input or duplicate SKU' })
-  async createVariant(@Body() createVariantDto: CreateVariantDto) {
-    return this.catalogService.createVariant(createVariantDto);
+  async createVariant(
+    @Body() createVariantDto: CreateVariantDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.catalogService.createVariant(createVariantDto, user.organizationId);
   }
 
   @Patch('variants/:id')
@@ -144,6 +149,18 @@ export class CatalogController {
   @Roles(Role.ADMINISTRADOR, Role.VENDEDOR)
   async getVariantById(@Param('id') id: string) {
     return this.catalogService.getVariantById(parseInt(id, 10));
+  }
+
+  @Get('sku/preview')
+  @ApiOperation({ summary: 'Preview the next auto-generated SKU for a category/product name' })
+  @ApiQuery({ name: 'categoryId', required: true })
+  @ApiQuery({ name: 'name', required: true })
+  async previewSku(
+    @Query('categoryId') categoryId: string,
+    @Query('name') name: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return { sku: await this.catalogService.previewSku(user.organizationId, parseInt(categoryId, 10), name) };
   }
 
   @Get('categories')

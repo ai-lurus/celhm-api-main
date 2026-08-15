@@ -7,9 +7,10 @@ export class CreateVariantDto {
   @IsInt()
   productId: number;
 
-  @ApiProperty({ description: 'SKU code (must be unique)' })
+  @ApiPropertyOptional({ description: 'SKU code (auto-generated from category/product name if omitted)' })
+  @IsOptional()
   @IsString()
-  sku: string;
+  sku?: string;
 
   @ApiPropertyOptional({ description: 'Variant name' })
   @IsOptional()

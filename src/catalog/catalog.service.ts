@@ -1,5 +1,6 @@
-import { Injectable, ConflictException, NotFoundException } from '@nestjs/common';
+import { Injectable, ConflictException, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
+import { SkuGeneratorService } from '../sku/sku-generator.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { CreateVariantDto } from './dto/create-variant.dto';
@@ -7,7 +8,10 @@ import { UpdateVariantDto } from './dto/update-variant.dto';
 
 @Injectable()
 export class CatalogService {
-  constructor(private prisma: PrismaService) { }
+  constructor(
+    private prisma: PrismaService,
+    private skuGenerator: SkuGeneratorService,
+  ) { }
 
   async getProducts(filters?: {
     categoria?: string;
@@ -24,7 +28,7 @@ export class CatalogService {
     const where: any = {};
 
     if (filters?.categoria) {
-      where.category = { contains: filters.categoria, mode: 'insensitive' };
+      where.category = { name: { contains: filters.categoria, mode: 'insensitive' } };
     }
 
     if (filters?.marca) {
@@ -41,7 +45,7 @@ export class CatalogService {
         { description: { contains: filters.q, mode: 'insensitive' } },
         { brand: { contains: filters.q, mode: 'insensitive' } },
         { model: { contains: filters.q, mode: 'insensitive' } },
-        { category: { contains: filters.q, mode: 'insensitive' } },
+        { category: { name: { contains: filters.q, mode: 'insensitive' } } },
       ];
     }
 
@@ -52,6 +56,7 @@ export class CatalogService {
           variants: {
             orderBy: { name: 'asc' },
           },
+          category: true,
           _count: {
             select: {
               variants: true,
@@ -81,6 +86,7 @@ export class CatalogService {
       data: createProductDto,
       include: {
         variants: true,
+        category: true,
         _count: {
           select: {
             variants: true,
@@ -96,6 +102,7 @@ export class CatalogService {
       data: updateProductDto,
       include: {
         variants: true,
+        category: true,
         _count: {
           select: {
             variants: true,
@@ -146,7 +153,7 @@ export class CatalogService {
     if (filters?.categoria) {
       andConditions.push({
         product: {
-          category: { contains: filters.categoria, mode: 'insensitive' },
+          category: { name: { contains: filters.categoria, mode: 'insensitive' } },
         },
       });
     }
@@ -178,7 +185,7 @@ export class CatalogService {
             select: {
               id: true,
               name: true,
-              category: true,
+              category: { select: { id: true, name: true } },
               brand: true,
               model: true,
             },
@@ -202,11 +209,26 @@ export class CatalogService {
     };
   }
 
-  async createVariant(dto: CreateVariantDto) {
+  async createVariant(dto: CreateVariantDto, organizationId: number) {
+    let sku = dto.sku;
+
+    if (!sku) {
+      const product = await this.prisma.product.findUnique({ where: { id: dto.productId } });
+      if (!product) {
+        throw new NotFoundException(`Producto con id ${dto.productId} no encontrado`);
+      }
+      if (!product.categoryId) {
+        throw new BadRequestException(
+          'Selecciona una categoría antes de generar el SKU automáticamente',
+        );
+      }
+      sku = await this.skuGenerator.next(organizationId, product.categoryId, product.name);
+    }
+
     return this.prisma.variant.create({
       data: {
         productId: dto.productId,
-        sku: dto.sku,
+        sku,
         name: dto.name,
         description: dto.description,
         color: dto.color,
@@ -257,6 +279,10 @@ export class CatalogService {
         product: true,
       },
     });
+  }
+
+  async previewSku(organizationId: number, categoryId: number, productName: string) {
+    return this.skuGenerator.preview(organizationId, categoryId, productName);
   }
 
   async getCategories() {
