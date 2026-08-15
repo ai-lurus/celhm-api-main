@@ -92,6 +92,7 @@ export class SalesService {
             qty: line.qty,
             unitPrice: line.unitPrice,
             discount: line.discount || 0,
+            advance: line.advance || 0,
             total: Number(line.unitPrice) * line.qty - Number(line.discount || 0),
           })),
         },

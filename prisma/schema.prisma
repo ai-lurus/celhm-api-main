@@ -464,6 +464,7 @@ model SaleLine {
   qty         Int      @default(1)
   unitPrice   Decimal  @db.Decimal(10, 2)
   discount    Decimal  @default(0) @db.Decimal(10, 2)
+  advance     Decimal  @default(0) @db.Decimal(10, 2)
   total       Decimal  @db.Decimal(10, 2)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt

@@ -36,6 +36,13 @@ export class CreateSaleLineDto {
   @IsNumber()
   @Min(0)
   discount?: number;
+
+  @ApiPropertyOptional({ description: 'Anticipo ya aplicado a esta línea (informativo, no afecta el total)' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  advance?: number;
 }
 
 export class CreatePaymentDto {

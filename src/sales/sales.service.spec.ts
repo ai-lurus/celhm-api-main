@@ -21,6 +21,9 @@ describe('SalesService', () => {
     branch: {
       findUnique: jest.fn(),
     },
+    ticket: {
+      update: jest.fn(),
+    },
     cashCut: {
       findFirst: jest.fn(),
       create: jest.fn(),
@@ -93,6 +96,7 @@ describe('SalesService', () => {
     mockPrismaService.payment.create.mockResolvedValue({});
     mockPrismaService.movement.create.mockReturnValue({});
     mockPrismaService.stock.updateMany.mockReturnValue({});
+    mockPrismaService.ticket.update.mockResolvedValue({});
     mockPrismaService.$transaction.mockImplementation((ops: any[]) => Promise.resolve(ops));
     mockPrismaService.sale.findMany.mockResolvedValue([]);
     mockPrismaService.branch.findUnique.mockResolvedValue({ organization: { vatRate: 0.16 } });
@@ -188,6 +192,63 @@ describe('SalesService', () => {
       });
       expect(mockCustomersService.registerPurchase).toHaveBeenCalledWith(7);
       expect(mockCommissionsService.generateForSale).toHaveBeenCalledWith(999);
+    });
+
+    it('persists the advance amount on ticket lines when creating a sale', async () => {
+      await service.create(
+        {
+          branchId: 1,
+          cashRegisterId: 1,
+          ticketId: 42,
+          lines: [
+            {
+              ticketId: 42,
+              description: 'Orden de Reparación TCK-001',
+              qty: 1,
+              unitPrice: 1200,
+              advance: 300,
+            },
+          ],
+          payments: [{ amount: 900, method: 'EFECTIVO' as any }],
+        } as any,
+        mockUser,
+      );
+
+      expect(mockPrismaService.sale.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            lines: {
+              create: [
+                expect.objectContaining({
+                  ticketId: 42,
+                  advance: 300,
+                }),
+              ],
+            },
+          }),
+        }),
+      );
+    });
+
+    it('defaults advance to 0 when a line does not specify one', async () => {
+      await service.create(
+        {
+          branchId: 1,
+          cashRegisterId: 1,
+          lines: [{ description: 'Producto', qty: 1, unitPrice: 100 }],
+        } as any,
+        mockUser,
+      );
+
+      expect(mockPrismaService.sale.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            lines: {
+              create: [expect.objectContaining({ advance: 0 })],
+            },
+          }),
+        }),
+      );
     });
   });
 
