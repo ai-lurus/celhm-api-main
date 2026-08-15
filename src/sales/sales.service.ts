@@ -111,6 +111,36 @@ export class SalesService {
       },
     });
 
+    // Create stock movements and update stock for every line with a variant,
+    // regardless of payment status — the item leaves inventory when the sale
+    // is created, not when it's paid.
+    for (const line of sale.lines) {
+      if (line.variantId && line.variant?.product?.tracksInventory !== false) {
+        await this.prisma.$transaction([
+          this.prisma.movement.create({
+            data: {
+              branchId: createSaleDto.branchId,
+              variantId: line.variantId,
+              type: MovementType.VTA,
+              qty: line.qty,
+              reason: `Venta ${folio}`,
+              folio,
+              userId: user.id,
+            },
+          }),
+          this.prisma.stock.updateMany({
+            where: {
+              branchId: createSaleDto.branchId,
+              variantId: line.variantId,
+            },
+            data: {
+              qty: { decrement: line.qty },
+            },
+          }),
+        ]);
+      }
+    }
+
     // If payments are provided, process them
     if (createSaleDto.payments && createSaleDto.payments.length > 0) {
       let totalPaymentAmount = 0;
@@ -162,41 +192,6 @@ export class SalesService {
         this.logger.error(`Error generating commissions for sale ${sale.id}:`, error);
       }
 
-      // If variant is provided, create stock movements and update stock
-      for (const line of createSaleDto.lines) {
-        if (line.variantId) {
-          const variant = await this.prisma.variant.findUnique({
-            where: { id: line.variantId },
-            include: { product: true },
-          });
-
-          if (variant?.product?.tracksInventory !== false) {
-            // Use batch transaction for movement and stock update
-            await this.prisma.$transaction([
-              this.prisma.movement.create({
-                data: {
-                  branchId: createSaleDto.branchId,
-                  variantId: line.variantId,
-                  type: MovementType.VTA,
-                  qty: line.qty,
-                  reason: `Venta ${folio}`,
-                  folio,
-                  userId: user.id,
-                },
-              }),
-              this.prisma.stock.updateMany({
-                where: {
-                  branchId: createSaleDto.branchId,
-                  variantId: line.variantId,
-                },
-                data: {
-                  qty: { decrement: line.qty },
-                },
-              }),
-            ]);
-          }
-        }
-      }
     }
 
     return this.findOne(sale.id, user.organizationId);

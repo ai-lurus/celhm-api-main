@@ -6,7 +6,7 @@ import { FoliosService } from '../folios/folios.service';
 import { CommissionsService } from '../commissions/commissions.service';
 import { CustomersService } from '../customers/customers.service';
 import { AuthUser } from '../auth/auth.service';
-import { Role, SaleStatus } from '@prisma/client';
+import { Role, SaleStatus, MovementType } from '@prisma/client';
 
 describe('SalesService', () => {
   let service: SalesService;
@@ -122,6 +122,44 @@ describe('SalesService', () => {
       await service.create({ ...baseDto, customerId: 7, payments: undefined } as any, mockUser);
 
       expect(mockCustomersService.registerPurchase).not.toHaveBeenCalled();
+    });
+
+    it('creates a stock movement and decrements stock for a fiado sale (no payments)', async () => {
+      mockPrismaService.sale.create.mockResolvedValueOnce({
+        id: 999,
+        total: 100,
+        lines: [
+          {
+            id: 1,
+            variantId: 55,
+            qty: 2,
+            variant: { product: { tracksInventory: true } },
+          },
+        ],
+      });
+
+      await service.create(
+        {
+          branchId: 1,
+          cashRegisterId: 1,
+          lines: [{ variantId: 55, description: 'Producto', qty: 2, unitPrice: 50, discount: 0 }],
+        } as any,
+        mockUser,
+      );
+
+      expect(mockPrismaService.movement.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          branchId: 1,
+          variantId: 55,
+          type: MovementType.VTA,
+          qty: 2,
+        }),
+      });
+      expect(mockPrismaService.stock.updateMany).toHaveBeenCalledWith({
+        where: { branchId: 1, variantId: 55 },
+        data: { qty: { decrement: 2 } },
+      });
+      expect(mockPrismaService.sale.update).not.toHaveBeenCalled();
     });
   });
 
