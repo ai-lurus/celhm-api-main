@@ -61,3 +61,4 @@ pids
 # Backup
 backup_old/
 .worktrees/
+.superpowers/
