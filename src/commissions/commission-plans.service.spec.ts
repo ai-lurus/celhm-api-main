@@ -146,14 +146,17 @@ describe('CommissionPlansService.listKnownCategories', () => {
   });
 
   it('returns distinct non-null product categories for the organization', async () => {
-    mockPrisma.product.findMany.mockResolvedValue([{ category: 'Accesorios' }, { category: 'Pantallas' }]);
+    mockPrisma.product.findMany.mockResolvedValue([
+      { category: { name: 'Accesorios' } },
+      { category: { name: 'Pantallas' } },
+    ]);
 
     const result = await service.listKnownCategories(1);
 
     expect(mockPrisma.product.findMany).toHaveBeenCalledWith({
-      where: { deletedAt: null, category: { not: null } },
-      select: { category: true },
-      distinct: ['category'],
+      where: { deletedAt: null, categoryId: { not: null } },
+      select: { category: { select: { name: true } } },
+      distinct: ['categoryId'],
     });
     expect(result).toEqual(['Accesorios', 'Pantallas']);
   });

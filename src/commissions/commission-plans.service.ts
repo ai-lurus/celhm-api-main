@@ -184,11 +184,13 @@ export class CommissionPlansService {
 
   async listKnownCategories(organizationId: number): Promise<string[]> {
     const rows = await this.prisma.product.findMany({
-      where: { deletedAt: null, category: { not: null } },
-      select: { category: true },
-      distinct: ['category'],
+      where: { deletedAt: null, categoryId: { not: null } },
+      select: { category: { select: { name: true } } },
+      distinct: ['categoryId'],
     });
-    return rows.map((r) => r.category!).filter(Boolean);
+    return rows
+      .map((r) => r.category?.name)
+      .filter((name): name is string => Boolean(name));
   }
 
   async listKnownCustomerGroupIds(organizationId: number): Promise<number[]> {

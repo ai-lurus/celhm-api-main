@@ -17,7 +17,7 @@ export class CommissionsService {
         customer: { select: { groupId: true } },
         lines: {
           include: {
-            variant: { include: { product: true } },
+            variant: { include: { product: { include: { category: true } } } },
             ticket: { select: { id: true, assignedUserId: true, userId: true, finalCost: true } },
           },
         },
@@ -151,7 +151,7 @@ export class CommissionsService {
       profitBase = Number(line.total) - cost;
     } else if (line.variantId && line.variant) {
       responsibleUserId = sale.userId;
-      productCategory = line.variant.product?.category ?? null;
+      productCategory = line.variant.product?.category?.name ?? null;
       const purchasePrice = line.variant.purchasePrice;
       if (purchasePrice === null) {
         isEstimated = true;
