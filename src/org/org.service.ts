@@ -65,6 +65,9 @@ export class OrgService {
         ...(data.ticketLegends && {
           ticketLegends: data.ticketLegends.map((legend) => ({ ...legend })),
         }),
+        ...(data.skuMaskConfig && {
+          skuMaskConfig: data.skuMaskConfig.map((segment) => ({ ...segment })),
+        }),
       },
     });
   }

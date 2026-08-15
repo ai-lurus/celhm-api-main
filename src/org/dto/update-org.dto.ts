@@ -2,6 +2,7 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsString, IsOptional, IsEmail, IsNumber, IsInt, Min, IsArray, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 import { TicketLegendDto } from './ticket-legend.dto';
+import { SkuMaskSegmentDto } from './sku-mask-segment.dto';
 
 export class UpdateOrgDto {
     @ApiPropertyOptional({ description: 'Organization name' })
@@ -64,4 +65,14 @@ export class UpdateOrgDto {
     @ValidateNested({ each: true })
     @Type(() => TicketLegendDto)
     ticketLegends?: TicketLegendDto[];
+
+    @ApiPropertyOptional({
+        description: 'SKU mask configuration segments, in display order',
+        type: [SkuMaskSegmentDto],
+    })
+    @IsOptional()
+    @IsArray()
+    @ValidateNested({ each: true })
+    @Type(() => SkuMaskSegmentDto)
+    skuMaskConfig?: SkuMaskSegmentDto[];
 }
