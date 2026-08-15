@@ -157,19 +157,29 @@ export class SalesService {
         }
       }
 
-      // Mark as paid (either real payment or covered by advance)
+      // Only mark the sale as paid once the amount received covers the total
+      const newStatus = totalPaymentAmount >= Number(sale.total) ? SaleStatus.PAGADO : SaleStatus.PENDIENTE;
       await this.prisma.sale.update({
         where: { id: sale.id },
-        data: { status: SaleStatus.PAGADO },
+        data: { status: newStatus },
       });
 
-      // Registered customers (not "Mostrador") count this paid sale towards
-      // frequent-buyer promotion, applied for their next sale onward.
-      if (createSaleDto.customerId) {
+      if (newStatus === SaleStatus.PAGADO) {
+        // Registered customers (not "Mostrador") count this paid sale towards
+        // frequent-buyer promotion, applied for their next sale onward.
+        if (createSaleDto.customerId) {
+          try {
+            await this.customersService.registerPurchase(createSaleDto.customerId);
+          } catch (error) {
+            this.logger.error(`Error registering purchase for customer ${createSaleDto.customerId}:`, error);
+          }
+        }
+
+        // Generate commissions for this sale (rule engine resolves per line)
         try {
-          await this.customersService.registerPurchase(createSaleDto.customerId);
+          await this.commissionsService.generateForSale(sale.id);
         } catch (error) {
-          this.logger.error(`Error registering purchase for customer ${createSaleDto.customerId}:`, error);
+          this.logger.error(`Error generating commissions for sale ${sale.id}:`, error);
         }
       }
 
@@ -183,13 +193,6 @@ export class SalesService {
             },
           },
         });
-      }
-
-      // Generate commissions for this sale (rule engine resolves per line)
-      try {
-        await this.commissionsService.generateForSale(sale.id);
-      } catch (error) {
-        this.logger.error(`Error generating commissions for sale ${sale.id}:`, error);
       }
 
     }

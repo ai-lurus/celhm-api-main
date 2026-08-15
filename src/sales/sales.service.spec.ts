@@ -89,7 +89,7 @@ describe('SalesService', () => {
 
     mockFoliosService.next.mockResolvedValue('DEV-001-202607-0001');
     mockPrismaService.cashCut.findFirst.mockResolvedValue({ id: 5, status: 'OPEN', cashRegisterId: 1 });
-    mockPrismaService.sale.create.mockResolvedValue({ id: 999, lines: [] });
+    mockPrismaService.sale.create.mockResolvedValue({ id: 999, lines: [], total: 100 });
     mockPrismaService.payment.create.mockResolvedValue({});
     mockPrismaService.movement.create.mockReturnValue({});
     mockPrismaService.stock.updateMany.mockReturnValue({});
@@ -160,6 +160,34 @@ describe('SalesService', () => {
         data: { qty: { decrement: 2 } },
       });
       expect(mockPrismaService.sale.update).not.toHaveBeenCalled();
+    });
+
+    it('leaves the sale PENDIENTE and skips commissions/purchase registration on a partial payment', async () => {
+      await service.create(
+        { ...baseDto, customerId: 7, payments: [{ amount: 40, method: 'EFECTIVO' as any }] } as any,
+        mockUser,
+      );
+
+      expect(mockPrismaService.sale.update).toHaveBeenCalledWith({
+        where: { id: 999 },
+        data: { status: SaleStatus.PENDIENTE },
+      });
+      expect(mockCustomersService.registerPurchase).not.toHaveBeenCalled();
+      expect(mockCommissionsService.generateForSale).not.toHaveBeenCalled();
+    });
+
+    it('marks the sale PAGADO and generates commissions once the payment covers the total', async () => {
+      await service.create(
+        { ...baseDto, customerId: 7, payments: [{ amount: 100, method: 'EFECTIVO' as any }] } as any,
+        mockUser,
+      );
+
+      expect(mockPrismaService.sale.update).toHaveBeenCalledWith({
+        where: { id: 999 },
+        data: { status: SaleStatus.PAGADO },
+      });
+      expect(mockCustomersService.registerPurchase).toHaveBeenCalledWith(7);
+      expect(mockCommissionsService.generateForSale).toHaveBeenCalledWith(999);
     });
   });
 
