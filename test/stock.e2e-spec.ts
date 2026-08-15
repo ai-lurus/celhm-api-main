@@ -43,4 +43,49 @@ describe('StockController (e2e)', () => {
         });
     });
   });
+
+  describe('/stock/items (POST)', () => {
+    let adminAccessToken: string;
+
+    beforeEach(async () => {
+      const loginResponse = await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ email: 'direccion@acme-repair.com', password: 'ChangeMe123!' });
+      adminAccessToken = loginResponse.body.access_token;
+    });
+
+    it('auto-generates a mask-based sku when none is provided', async () => {
+      const categoriesResponse = await request(app.getHttpServer())
+        .get('/catalog/categories')
+        .set('Authorization', `Bearer ${adminAccessToken}`);
+
+      // Get a valid category ID - use first top-level category or first child
+      let categoryId: number;
+      if (Array.isArray(categoriesResponse.body) && categoriesResponse.body.length > 0) {
+        const firstCategory = categoriesResponse.body[0];
+        if (firstCategory.children && firstCategory.children.length > 0) {
+          categoryId = firstCategory.children[0].id;
+        } else {
+          categoryId = firstCategory.id;
+        }
+      } else {
+        // Skip test if no categories exist
+        return;
+      }
+
+      const response = await request(app.getHttpServer())
+        .post('/stock/items')
+        .set('Authorization', `Bearer ${adminAccessToken}`)
+        .send({
+          name: 'Producto E2E Sku Test',
+          categoryId,
+          qty: 1,
+          min: 0,
+        })
+        .expect(201);
+
+      expect(response.body.variant.sku).toBeTruthy();
+      expect(response.body.variant.sku).not.toMatch(/^SKU-\d+/);
+    });
+  });
 });

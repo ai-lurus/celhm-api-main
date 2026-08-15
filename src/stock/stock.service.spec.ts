@@ -3,6 +3,7 @@ import { StockService } from './stock.service';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { AuthUser } from '../auth/auth.service';
 import { Role } from '@prisma/client';
+import { SkuGeneratorService } from '../sku/sku-generator.service';
 
 describe('StockService', () => {
   let service: StockService;
@@ -12,13 +13,21 @@ describe('StockService', () => {
     stock: {
       findFirst: jest.fn(),
       update: jest.fn(),
+      create: jest.fn(),
     },
     product: {
       update: jest.fn(),
+      findUnique: jest.fn(),
+      create: jest.fn(),
     },
     variant: {
       update: jest.fn(),
+      create: jest.fn(),
     },
+  };
+
+  const mockSkuGenerator = {
+    next: jest.fn(),
   };
 
   const mockUser: AuthUser = {
@@ -39,6 +48,10 @@ describe('StockService', () => {
         {
           provide: PrismaService,
           useValue: mockPrismaService,
+        },
+        {
+          provide: SkuGeneratorService,
+          useValue: mockSkuGenerator,
         },
       ],
     }).compile();
@@ -87,6 +100,46 @@ describe('StockService', () => {
           data: expect.objectContaining({ barcode: '7501234567890' }),
         }),
       );
+    });
+  });
+
+  describe('createInventoryItem', () => {
+    it('generates the sku from the mask for a new inline product', async () => {
+      mockPrismaService.product.create.mockResolvedValue({ id: 1, name: 'Cable USB-C', categoryId: 2 });
+      mockSkuGenerator.next.mockResolvedValue('CAC0001');
+      mockPrismaService.variant.create.mockResolvedValue({ id: 1, sku: 'CAC0001' });
+      mockPrismaService.stock.create.mockResolvedValue({ id: 1, qty: 10, min: 2 });
+
+      await service.createInventoryItem(
+        { name: 'Cable USB-C', categoryId: 2, qty: 10, min: 2 } as any,
+        mockUser,
+      );
+
+      expect(mockSkuGenerator.next).toHaveBeenCalledWith(mockUser.organizationId, 2, 'Cable USB-C');
+      expect(mockPrismaService.product.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ categoryId: 2 }) }),
+      );
+    });
+
+    it('respects a manually provided sku without calling the generator', async () => {
+      mockPrismaService.product.create.mockResolvedValue({ id: 1, name: 'Cable USB-C', categoryId: 2 });
+      mockPrismaService.variant.create.mockResolvedValue({ id: 1, sku: 'MANUAL-1' });
+      mockPrismaService.stock.create.mockResolvedValue({ id: 1, qty: 10, min: 2 });
+
+      await service.createInventoryItem(
+        { name: 'Cable USB-C', categoryId: 2, sku: 'MANUAL-1', qty: 10, min: 2 } as any,
+        mockUser,
+      );
+
+      expect(mockSkuGenerator.next).not.toHaveBeenCalled();
+    });
+
+    it('throws when there is no sku and no category', async () => {
+      mockPrismaService.product.create.mockResolvedValue({ id: 1, name: 'Cable USB-C', categoryId: null });
+
+      await expect(
+        service.createInventoryItem({ name: 'Cable USB-C', qty: 10, min: 2 } as any, mockUser),
+      ).rejects.toThrow('categoría');
     });
   });
 });

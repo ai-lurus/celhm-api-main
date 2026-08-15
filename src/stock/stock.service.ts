@@ -3,10 +3,14 @@ import { PrismaService } from '../common/prisma/prisma.service';
 import { AuthUser } from '../auth/auth.service';
 import { CreateInventoryItemDto } from './dto/create-inventory-item.dto';
 import { UpdateInventoryItemDto } from './dto/update-inventory-item.dto';
+import { SkuGeneratorService } from '../sku/sku-generator.service';
 
 @Injectable()
 export class StockService {
-  constructor(private prisma: PrismaService) { }
+  constructor(
+    private prisma: PrismaService,
+    private skuGenerator: SkuGeneratorService,
+  ) { }
 
   async getStock(
     branchId: number,
@@ -63,10 +67,7 @@ export class StockService {
         ...(where.variant || {}),
         product: {
           ...(where.variant?.product || {}),
-          category: {
-            contains: filters.categoriaId,
-            mode: 'insensitive',
-          },
+          categoryId: parseInt(filters.categoriaId, 10),
         },
       };
     }
@@ -133,7 +134,8 @@ export class StockService {
                 select: {
                   id: true,
                   name: true,
-                  category: true,
+                  categoryId: true,
+                  category: { select: { id: true, name: true } },
                   brand: true,
                   model: true,
                   isPriceEditable: true,
@@ -295,14 +297,6 @@ export class StockService {
       throw new BadRequestException('BranchId is required');
     }
 
-    // Generate SKU if not provided
-    let sku = dto.sku;
-    if (!sku) {
-      // Generate unique SKU if not provided
-      sku = `SKU-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-    }
-
-    // Create or fetch product first
     let product;
     if (dto.productId) {
       product = await this.prisma.product.findUnique({ where: { id: dto.productId } });
@@ -317,6 +311,7 @@ export class StockService {
             name: dto.name!,
             brand: dto.brand,
             model: dto.model,
+            categoryId: dto.categoryId,
             isPriceEditable: dto.isPriceEditable,
             tracksInventory: dto.tracksInventory,
           },
@@ -326,8 +321,16 @@ export class StockService {
       }
     }
 
-    // Create variant with productId
-    // Catch unique constraint error for SKU
+    let sku = dto.sku;
+    if (!sku) {
+      if (!product.categoryId) {
+        throw new BadRequestException(
+          'Selecciona una categoría antes de generar el SKU automáticamente',
+        );
+      }
+      sku = await this.skuGenerator.next(user.organizationId, product.categoryId, product.name);
+    }
+
     let variant;
     try {
       variant = await this.prisma.variant.create({
@@ -341,35 +344,12 @@ export class StockService {
         },
       });
     } catch (error: any) {
-      // If SKU already exists, try to generate a new one or throw error
       if (error.code === 'P2002' && error.meta?.target?.includes('sku')) {
-        // If SKU was provided by user, throw error
-        if (dto.sku) {
-          throw new BadRequestException(`SKU "${sku}" already exists. Please use a different SKU.`);
-        }
-        // If SKU was auto-generated, try again with a new one
-        // This should be rare, but handle it just in case
-        try {
-          sku = `SKU-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-          variant = await this.prisma.variant.create({
-            data: {
-              productId: product.id,
-              sku,
-              name: dto.name,
-              price: dto.price,
-              purchasePrice: dto.purchasePrice,
-              barcode: dto.barcode,
-            },
-          });
-        } catch (retryError: any) {
-          throw new BadRequestException(`Failed to create variant: ${retryError.message}`);
-        }
-      } else {
-        throw new BadRequestException(`Failed to create variant: ${error.message}`);
+        throw new BadRequestException(`SKU "${sku}" already exists. Please use a different SKU.`);
       }
+      throw new BadRequestException(`Failed to create variant: ${error.message}`);
     }
 
-    // Create stock with variantId
     const stock = await this.prisma.stock.create({
       data: {
         branchId,

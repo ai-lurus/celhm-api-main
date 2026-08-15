@@ -12,6 +12,11 @@ export class CreateInventoryItemDto {
   @IsInt()
   productId?: number;
 
+  @ApiProperty({ description: 'Category ID (used when creating a new product inline)', required: false })
+  @IsOptional()
+  @IsInt()
+  categoryId?: number;
+
   @ApiProperty({ description: 'Product name' })
   @ValidateIf((o) => !o.productId)
   @IsString()
