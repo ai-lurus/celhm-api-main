@@ -421,8 +421,23 @@ export class TicketsService {
       throw new Error('Ticket not found');
     }
 
-    // Use batch transaction for atomic stock reservation, part creation and movement
-    const [, ticketPart] = await this.prisma.$transaction([
+    let unitCost: number | null = null;
+    let newFinalCost: number | null = null;
+    if (addTicketPartDto.includeCost) {
+      const variant = await this.prisma.variant.findUnique({
+        where: { id: addTicketPartDto.variantId },
+      });
+      const price = Number(variant?.price ?? 0);
+      if (price > 0) {
+        unitCost = price;
+        newFinalCost = Number(ticket.finalCost ?? 0) + price * addTicketPartDto.qty;
+      }
+    }
+    const costIncluded = unitCost !== null;
+
+    // Use batch transaction for atomic stock reservation, part creation, movement,
+    // and (when includeCost applies) the ticket's finalCost update.
+    const operations: any[] = [
       this.prisma.stock.updateMany({
         where: {
           branchId: ticket.branchId,
@@ -443,6 +458,8 @@ export class TicketsService {
           variantId: addTicketPartDto.variantId,
           qty: addTicketPartDto.qty,
           state: TicketPartState.RESERVADA,
+          costIncluded,
+          unitCost: costIncluded ? unitCost : null,
         },
       }),
       this.prisma.movement.create({
@@ -458,7 +475,18 @@ export class TicketsService {
           userAgent,
         },
       }),
-    ]);
+    ];
+
+    if (costIncluded) {
+      operations.push(
+        this.prisma.ticket.update({
+          where: { id },
+          data: { finalCost: newFinalCost! },
+        }),
+      );
+    }
+
+    const [, ticketPart] = await this.prisma.$transaction(operations);
 
     return ticketPart;
   }

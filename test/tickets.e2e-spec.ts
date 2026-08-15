@@ -197,5 +197,59 @@ describe('TicketsController (e2e)', () => {
         .expect(400);
     });
   });
+
+  describe('/tickets/:id/piezas (POST)', () => {
+    let ticketId: number;
+    let variantId: number;
+    let variantPrice: number;
+
+    beforeEach(async () => {
+      const createResponse = await request(app.getHttpServer())
+        .post('/tickets')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({
+          branchId: 1,
+          customerName: 'Test Customer',
+          device: 'iPhone 12',
+          problem: 'Necesita pieza',
+        });
+      ticketId = createResponse.body.id;
+
+      const stockResponse = await request(app.getHttpServer())
+        .get('/stock')
+        .set('Authorization', `Bearer ${accessToken}`);
+      const stockItem = stockResponse.body.data[0];
+      variantId = stockItem.variant.id;
+      variantPrice = Number(stockItem.variant.price);
+    }, 10000);
+
+    it('leaves finalCost unchanged when includeCost is omitted', async () => {
+      await request(app.getHttpServer())
+        .post(`/tickets/${ticketId}/piezas`)
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({ variantId, qty: 1 })
+        .expect(201);
+
+      const ticketResponse = await request(app.getHttpServer())
+        .get(`/tickets/${ticketId}`)
+        .set('Authorization', `Bearer ${accessToken}`);
+
+      expect(ticketResponse.body.finalCost ?? null).toBeNull();
+    }, 10000);
+
+    it('increments finalCost by variant price * qty when includeCost is true', async () => {
+      await request(app.getHttpServer())
+        .post(`/tickets/${ticketId}/piezas`)
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({ variantId, qty: 2, includeCost: true })
+        .expect(201);
+
+      const ticketResponse = await request(app.getHttpServer())
+        .get(`/tickets/${ticketId}`)
+        .set('Authorization', `Bearer ${accessToken}`);
+
+      expect(Number(ticketResponse.body.finalCost)).toBeCloseTo(variantPrice * 2, 2);
+    }, 10000);
+  });
 });
 

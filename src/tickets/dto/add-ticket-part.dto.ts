@@ -1,5 +1,5 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsInt, Min } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsInt, IsOptional, IsBoolean, Min } from 'class-validator';
 
 export class AddTicketPartDto {
   @ApiProperty()
@@ -10,5 +10,12 @@ export class AddTicketPartDto {
   @IsInt()
   @Min(1)
   qty: number;
+
+  @ApiPropertyOptional({
+    description: 'Si es true, suma el precio actual del variant al finalCost del ticket.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  includeCost?: boolean;
 }
 
