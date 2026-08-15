@@ -14,16 +14,17 @@ model Organization {
   id           Int                    @id @default(autoincrement())
   name         String
   slug         String                 @unique
-  logo          String?             
-  phone         String?             
-  address       String?             
-  email         String?             
-  taxId         String?             
-  website       String?             
-  currency      String                @default("MXN") 
-  timezone      String                @default("America/Mexico_City") 
+  logo          String?
+  phone         String?
+  address       String?
+  email         String?
+  taxId         String?
+  website       String?
+  currency      String                @default("MXN")
+  timezone      String                @default("America/Mexico_City")
   vatRate       Decimal               @default(0.16) @db.Decimal(10, 2)
   ticketLegends Json                  @default("[]")
+  skuMaskConfig Json                  @default("[]")
   frequentBuyerThreshold Int          @default(3)
   createdAt    DateTime               @default(now())
   updatedAt    DateTime               @updatedAt
@@ -110,16 +111,18 @@ model Branch {
 }
 
 model Product {
-  id          Int       @id @default(autoincrement())
-  name        String
-  description String?
-  category    String?
-  brand       String?
-  model       String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  deletedAt   DateTime?
-  variants    Variant[]
+  id             Int       @id @default(autoincrement())
+  name           String
+  description    String?
+  categoryLegacy String?   @map("category")
+  categoryId     Int?
+  category       ProductCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  brand          String?
+  model          String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+  variants       Variant[]
 
   tracksInventory Boolean @default(true)
   isPriceEditable Boolean @default(false)
@@ -251,6 +254,7 @@ model ProductCategory {
   parentId      Int?
   parent        ProductCategory?  @relation("CategoryChildren", fields: [parentId], references: [id])
   children      ProductCategory[] @relation("CategoryChildren")
+  products      Product[]
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
 
@@ -380,6 +384,16 @@ model FolioSequence {
 
   @@unique([prefix, branchId, period])
   @@map("folio_sequences")
+}
+
+model SkuSequence {
+  id        Int      @id @default(autoincrement())
+  prefix    String   @unique
+  seq       Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("sku_sequences")
 }
 
 model NotificationTemplate {
