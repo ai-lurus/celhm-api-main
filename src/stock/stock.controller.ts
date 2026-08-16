@@ -22,7 +22,7 @@ export class StockController {
   @Get()
   @ApiOperation({ summary: 'Get stock by branch' })
   @ApiResponse({ status: 200, description: 'Stock list' })
-  @Roles(Role.ADMINISTRADOR, Role.VENDEDOR, Role.TECNICO)
+  @Roles(Role.ADMINISTRADOR, Role.VENDEDOR, Role.TECNICO, Role.CAJERO, Role.ALMACENISTA)
   async getStock(
     @CurrentUser() user: AuthUser,
     @Query('sucursal') sucursal?: string,
