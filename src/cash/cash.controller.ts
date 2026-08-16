@@ -6,12 +6,16 @@ import { UpdateCashCutDto } from './dto/update-cash-cut.dto';
 import { CreateCashRegisterDto } from './dto/create-cash-register.dto';
 import { OpenCashCutDto } from './dto/open-cash-cut.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { Roles } from '../common/decorators/roles.decorator';
+import { Role } from '@prisma/client';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthUser } from '../auth/auth.service';
 
 @ApiTags('cash')
 @Controller('cash')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(Role.ADMINISTRADOR, Role.VENDEDOR, Role.CAJERO)
 @ApiBearerAuth()
 export class CashController {
   constructor(private readonly cashService: CashService) { }
