@@ -18,7 +18,7 @@ export class CustomerGroupsController {
   constructor(private readonly customerGroupsService: CustomerGroupsService) {}
 
   @Get()
-  @Roles(Role.ADMINISTRADOR, Role.VENDEDOR)
+  @Roles(Role.ADMINISTRADOR, Role.TECNICO, Role.CAJERO)
   @ApiOperation({ summary: "List the organization's customer groups" })
   @ApiResponse({ status: 200, description: 'List of customer groups' })
   findAll(@CurrentUser() user: AuthUser) {

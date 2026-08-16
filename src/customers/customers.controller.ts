@@ -14,7 +14,7 @@ import type { AuthUser } from '../auth/auth.service';
 @ApiTags('customers')
 @Controller('customers')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(Role.ADMINISTRADOR, Role.VENDEDOR)
+@Roles(Role.ADMINISTRADOR, Role.TECNICO, Role.CAJERO)
 @ApiBearerAuth()
 export class CustomersController {
   constructor(private readonly customersService: CustomersService) { }
