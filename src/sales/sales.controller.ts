@@ -22,6 +22,7 @@ export class SalesController {
   @Post()
   @ApiOperation({ summary: 'Create a new sale' })
   @ApiResponse({ status: 201, description: 'Sale created successfully' })
+  @Roles(Role.ADMINISTRADOR, Role.VENDEDOR, Role.CAJERO)
   create(@Body() createSaleDto: CreateSaleDto, @CurrentUser() user: AuthUser) {
     return this.salesService.create(createSaleDto, user);
   }
@@ -37,6 +38,7 @@ export class SalesController {
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'pageSize', required: false, type: Number })
   @ApiResponse({ status: 200, description: 'List of sales' })
+  @Roles(Role.ADMINISTRADOR, Role.VENDEDOR, Role.CAJERO)
   findAll(
     @CurrentUser() user: AuthUser,
     @Query('branchId') branchId?: string,
@@ -63,6 +65,7 @@ export class SalesController {
   @Get(':id')
   @ApiOperation({ summary: 'Get sale by ID' })
   @ApiResponse({ status: 200, description: 'Sale details' })
+  @Roles(Role.ADMINISTRADOR, Role.VENDEDOR, Role.CAJERO)
   findOne(@Param('id') id: string, @CurrentUser() user: AuthUser) {
     return this.salesService.findOne(parseInt(id), user.organizationId);
   }
@@ -70,6 +73,7 @@ export class SalesController {
   @Post(':id/payments')
   @ApiOperation({ summary: 'Add payment to sale' })
   @ApiResponse({ status: 201, description: 'Payment added successfully' })
+  @Roles(Role.ADMINISTRADOR, Role.VENDEDOR, Role.CAJERO)
   addPayment(
     @Param('id') id: string,
     @Body() addPaymentDto: AddPaymentDto,
