@@ -35,7 +35,7 @@ export class CatalogController {
   @ApiQuery({ name: 'q', required: false, description: 'Search by name, description, brand, model or category' })
   @ApiQuery({ name: 'page', required: false, description: 'Page number (1-based)', example: 1 })
   @ApiQuery({ name: 'pageSize', required: false, description: 'Items per page', example: 50 })
-  @Roles(Role.ADMINISTRADOR, Role.VENDEDOR)
+  @Roles(Role.ADMINISTRADOR, Role.VENDEDOR, Role.CAJERO, Role.ALMACENISTA)
   async getProducts(
     @Query('categoria') categoria?: string,
     @Query('marca') marca?: string,
@@ -91,7 +91,7 @@ export class CatalogController {
   @ApiQuery({ name: 'q', required: false, description: 'Search by SKU, name or product name' })
   @ApiQuery({ name: 'page', required: false, description: 'Page number (1-based)', example: 1 })
   @ApiQuery({ name: 'pageSize', required: false, description: 'Items per page', example: 50 })
-  @Roles(Role.ADMINISTRADOR, Role.VENDEDOR)
+  @Roles(Role.ADMINISTRADOR, Role.VENDEDOR, Role.CAJERO, Role.ALMACENISTA)
   async getVariants(
     @Query('marca') marca?: string,
     @Query('modelo') modelo?: string,
@@ -146,7 +146,7 @@ export class CatalogController {
   @ApiOperation({ summary: 'Get variant by ID' })
   @ApiResponse({ status: 200, description: 'Variant details' })
   @ApiResponse({ status: 404, description: 'Variant not found' })
-  @Roles(Role.ADMINISTRADOR, Role.VENDEDOR)
+  @Roles(Role.ADMINISTRADOR, Role.VENDEDOR, Role.CAJERO, Role.ALMACENISTA)
   async getVariantById(@Param('id') id: string) {
     return this.catalogService.getVariantById(parseInt(id, 10));
   }
@@ -166,7 +166,7 @@ export class CatalogController {
   @Get('categories')
   @ApiOperation({ summary: 'Get all categories' })
   @ApiResponse({ status: 200, description: 'List of categories' })
-  @Roles(Role.ADMINISTRADOR, Role.VENDEDOR)
+  @Roles(Role.ADMINISTRADOR, Role.VENDEDOR, Role.CAJERO, Role.ALMACENISTA)
   async getCategories() {
     return this.catalogService.getCategories();
   }
@@ -205,7 +205,7 @@ export class CatalogController {
   @Get('brands')
   @ApiOperation({ summary: 'Get all brands' })
   @ApiResponse({ status: 200, description: 'List of brands' })
-  @Roles(Role.ADMINISTRADOR, Role.VENDEDOR, Role.TECNICO)
+  @Roles(Role.ADMINISTRADOR, Role.VENDEDOR, Role.TECNICO, Role.CAJERO, Role.ALMACENISTA)
   async getBrands() {
     // Return both product brands and managed device brands
     const [productBrands, deviceBrands] = await Promise.all([
@@ -254,7 +254,7 @@ export class CatalogController {
   @ApiOperation({ summary: 'Get all device models, optionally filtered by brand' })
   @ApiResponse({ status: 200, description: 'List of device models' })
   @ApiQuery({ name: 'brandId', required: false, description: 'Filter by brand ID' })
-  @Roles(Role.ADMINISTRADOR, Role.VENDEDOR, Role.TECNICO)
+  @Roles(Role.ADMINISTRADOR, Role.VENDEDOR, Role.TECNICO, Role.CAJERO, Role.ALMACENISTA)
   async getDeviceModels(@Query('brandId') brandId?: string) {
     return this.catalogService.getDeviceModels(brandId ? parseInt(brandId, 10) : undefined);
   }
