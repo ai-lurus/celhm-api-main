@@ -76,11 +76,23 @@ Reuse first: `DateRangePicker`, `packages/ui` Button/Badge/Card/Input, toast, `u
 **Decisions needed (recommendation first):**
 - Q1 Card inclusion once the rate filter goes. Today Chlau (ADMINISTRADOR) appears only because of `commissionRate`; without a change he vanishes. Recommend: role TECNICO/VENDEDOR, or any rule (plan or override), or any commission row.
 - Q2 (DECIDED) Preview uses the end of that day in org timezone. Chlau's legacy row (12:10 local) then resolves for 2026-09-21. Real sales keep their exact timestamp.
-- Q3 Reject `validFrom` before start of today? Recommend yes (non-goal: no retroactive commissions; a backdated rule would still reach sales created earlier and paid later). Future dates allowed ("Programada").
+- Q3 (DONE in PR A) The API rejects a `validFrom` day before today; future days are allowed ("Programada"). Non-goal: no retroactive commissions.
 - Q4 Close-on-add matches scope type and value regardless of basis (the resolver ignores basis). Apply to plan rules too? Recommend yes, same tie risk.
-- Q5 `markAsPaid` and `markManyAsPaid` have no status guard: a second click overwrites `paidAt`, and negative refund rows can be "paid". Recommend a `PENDIENTE`-only guard in PR B, required before batch pay.
-- Q6 Usage list for removing `commissionRate` from the summary response: producer `commissions.service.ts:380-383`; consumers `useCommissions.ts:43` and `commissions/page.tsx:192`. Nothing else. Recommend removing it. DTOs, column and script untouched.
-- Q7 Likely crash: `commissions/page.tsx` renders `commission.ticket.folio`, but `ticket` is null for retail lines (`ticketId` is nullable). Unconfirmed in the browser (0 commission rows exist). Recommend fixing in PR A as its own commit and confirming in the verification walkthrough.
+- Q5 (FOLLOW-UP) `markAsPaid` and `markManyAsPaid` have no status guard. Risk today: LOW. It cannot break the screen and moves no money (no Caja), but a stale tab or double click on "Pagar" rewrites `paidAt` on an already paid row, and a refund (negative) row can be marked paid. Can wait for PR B; must land before batch pay. Fix: `PENDIENTE`-only guard.
+- Q6 (CHANGED) `commissionRate` stays in the `/commissions/summary` response in PR A (deprecated, additive) so the API can deploy before the web PR. Producer `commissions.service.ts` (getSummary); the only web readers were the card and the Usuarios column, both removed in PR A. Removing the field from the response is a follow-up after the web PR is deployed. DTOs, column and script untouched.
+- Q7 (FOLLOW-UP, decide whether it waits for PR B) Risk today: HIGH once a row exists. `commissions/page.tsx:245` renders `commission.ticket.folio`, and `ticket` is null for retail lines (`ticketId` is nullable; `generateForLine` writes `ticketId: line.ticketId ?? null`). The first retail commission row (any paid retail sale by Chlau, who now has a 5% rule) throws a TypeError, and the whole Comisiones screen falls to the root `error.tsx`. Not visible today because there are 0 commission rows. Read from the code, not reproduced in the browser (no writes allowed). Fix is one null-safe line; recommend shipping it separately before PR B.
 - Q8 Fourth location of the legacy rate: the create-user modal (`users/page.tsx:889-911`, copy "Porcentaje aplicado al subtotal de comisiones"). Recommend removing it too.
 - Q9 `.worktrees/comisiones-personalizadas` is a stale copy of the API (files differ from `src/`). It will not be touched and grep results from it will be ignored.
 - Q10 Git is broken (Xcode CLI tools), so per-step commits and rollback points are blocked until it is fixed.
+
+## 7. Follow-ups (not in PR A)
+
+| Item | Risk today | Notes |
+|---|---|---|
+| Q7 null `commission.ticket` in the table | High once a retail commission exists | One-line fix; recommend not waiting for PR B |
+| Q5 pay status guard | Low (audit date only, no money moves) | Required before batch pay |
+| Remove `commissionRate` from the summary response | None | After the web PR is deployed |
+| `Organization.timezone` is unused outside commissions | None | Tech debt, no repo-wide refactor |
+| Plan "Rol" field, empty states, Spanish copy, one date format, filters, batch pay | UX | PR B |
+| Card inclusion also covers an assigned INACTIVE plan | None | Deliberate superset of "active plan" so the inactive-plan warning stays visible; one line in `getSummary` if you want the strict version |
+| Legacy rule revised the same day it was created | Cosmetic | Old rule ends 1 ms before start of day, so its range reads inverted; status shows "Vencida" |
