@@ -28,7 +28,10 @@ export class CreateCommissionRuleDto {
   @Min(0)
   value: number;
 
-  @ApiPropertyOptional({ description: 'ISO date; default: ahora' })
+  @ApiPropertyOptional({
+    description:
+      'Día de inicio (YYYY-MM-DD) en la zona horaria de la organización; la regla empieza a las 00:00 de ese día. Default: hoy. No puede ser anterior a hoy.',
+  })
   @IsOptional()
   @IsDateString()
   validFrom?: string;
