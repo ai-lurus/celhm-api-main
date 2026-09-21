@@ -1,7 +1,11 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
 import { CommissionStatus } from '@prisma/client';
-import { resolveCommissionRule, RuleCandidate } from './commission-rule-resolver';
+import {
+  MEMBERSHIP_RULES_INCLUDE,
+  RuleSourceMembership,
+  resolveEffectiveRule,
+} from './effective-commission-rule';
 
 @Injectable()
 export class CommissionsService {
@@ -28,11 +32,11 @@ export class CommissionsService {
 
     const organizationId = sale.branch.organizationId;
     const customerGroupId = sale.customer?.groupId ?? null;
-    const candidateCache = new Map<number, RuleCandidate[]>();
+    const membershipCache = new Map<number, RuleSourceMembership | null>();
 
     for (const line of sale.lines) {
       try {
-        await this.generateForLine(line, sale, organizationId, customerGroupId, candidateCache);
+        await this.generateForLine(line, sale, organizationId, customerGroupId, membershipCache);
       } catch (error) {
         this.logger.error(`Error generating commission for sale line ${line.id}:`, error);
       }
@@ -81,44 +85,11 @@ export class CommissionsService {
     }
   }
 
-  private async getCandidateRules(userId: number, organizationId: number): Promise<RuleCandidate[]> {
-    const membership = await this.prisma.orgMembership.findUnique({
+  private loadMembership(userId: number, organizationId: number) {
+    return this.prisma.orgMembership.findUnique({
       where: { organizationId_userId: { organizationId, userId } },
-      include: {
-        commissionPlan: { include: { rules: true } },
-        overrideRules: true,
-      },
+      include: MEMBERSHIP_RULES_INCLUDE,
     });
-
-    if (!membership) return [];
-
-    const planRules: RuleCandidate[] = (
-      membership.commissionPlan?.active ? membership.commissionPlan.rules : []
-    ).map((r) => ({
-      id: r.id,
-      source: 'PLAN' as const,
-      scopeType: r.scopeType,
-      scopeValue: r.scopeValue,
-      basis: r.basis,
-      calcMethod: r.calcMethod,
-      value: Number(r.value),
-      validFrom: r.validFrom,
-      validTo: r.validTo,
-    }));
-
-    const overrideRules: RuleCandidate[] = membership.overrideRules.map((r) => ({
-      id: r.id,
-      source: 'OVERRIDE' as const,
-      scopeType: r.scopeType,
-      scopeValue: r.scopeValue,
-      basis: r.basis,
-      calcMethod: r.calcMethod,
-      value: Number(r.value),
-      validFrom: r.validFrom,
-      validTo: r.validTo,
-    }));
-
-    return [...planRules, ...overrideRules];
   }
 
   private async generateForLine(
@@ -126,7 +97,7 @@ export class CommissionsService {
     sale: any,
     organizationId: number,
     customerGroupId: number | null,
-    candidateCache: Map<number, RuleCandidate[]>,
+    membershipCache: Map<number, RuleSourceMembership | null>,
   ): Promise<void> {
     let responsibleUserId: number | null = null;
     let productCategory: string | null = null;
@@ -164,13 +135,14 @@ export class CommissionsService {
 
     if (!responsibleUserId) return;
 
-    if (!candidateCache.has(responsibleUserId)) {
-      candidateCache.set(responsibleUserId, await this.getCandidateRules(responsibleUserId, organizationId));
+    if (!membershipCache.has(responsibleUserId)) {
+      membershipCache.set(responsibleUserId, await this.loadMembership(responsibleUserId, organizationId));
     }
-    const candidates = candidateCache.get(responsibleUserId)!;
-    if (candidates.length === 0) return;
+    const membership = membershipCache.get(responsibleUserId);
+    if (!membership) return;
 
-    const result = resolveCommissionRule(candidates, {
+    // Real sales resolve at the exact sale instant; only Preview uses a date-only input.
+    const result = resolveEffectiveRule(membership, {
       date: sale.createdAt,
       productCategory,
       customerGroupId,
@@ -353,7 +325,7 @@ export class CommissionsService {
         email: true,
         memberships: {
           where: { organizationId },
-          select: { commissionRate: true, commissionPlan: { select: { id: true, name: true } } },
+          include: MEMBERSHIP_RULES_INCLUDE,
         },
         commissions: {
           select: {
@@ -364,7 +336,13 @@ export class CommissionsService {
       },
     });
 
+    const now = new Date();
+
     return users.map((user) => {
+      const membership = user.memberships[0] ?? null;
+      const effective = membership
+        ? resolveEffectiveRule(membership, { date: now, productCategory: null, customerGroupId: null })
+        : null;
       const pending = user.commissions
         .filter((c) => c.status === CommissionStatus.PENDIENTE)
         .reduce((sum, c) => sum + Number(c.amount), 0);
@@ -380,7 +358,18 @@ export class CommissionsService {
         commissionRate: user.memberships[0]?.commissionRate
           ? Number(user.memberships[0].commissionRate)
           : null,
-        commissionPlanName: user.memberships[0]?.commissionPlan?.name ?? null,
+        commissionPlanName: membership?.commissionPlan?.name ?? null,
+        commissionPlanActive: membership?.commissionPlan?.active ?? null,
+        // Winning GENERAL-scope rule right now, from the same function Preview and real sales use.
+        effectiveRule: effective
+          ? {
+              ruleId: effective.rule.id,
+              source: effective.rule.source,
+              basis: effective.rule.basis,
+              calcMethod: effective.rule.calcMethod,
+              value: effective.rule.value,
+            }
+          : null,
         pendingAmount: pending,
         paidAmount: paid,
         totalAmount: total,

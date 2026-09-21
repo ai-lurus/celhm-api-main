@@ -7,7 +7,7 @@ import {
   CreateCommissionRuleOverrideDto,
   ReviseCommissionRuleDto,
 } from './dto/commission-rule.dto';
-import { resolveCommissionRule, RuleCandidate } from './commission-rule-resolver';
+import { MEMBERSHIP_RULES_INCLUDE, resolveEffectiveRule } from './effective-commission-rule';
 
 @Injectable()
 export class CommissionPlansService {
@@ -127,34 +127,9 @@ export class CommissionPlansService {
   ): Promise<Array<{ scopeLabel: string; ruleId: number; basis: string; calcMethod: string; value: number }>> {
     const membership = await this.prisma.orgMembership.findFirst({
       where: { id: membershipId, organizationId },
-      include: { commissionPlan: { include: { rules: true } }, overrideRules: true },
+      include: MEMBERSHIP_RULES_INCLUDE,
     });
     if (!membership) throw new NotFoundException('Empleado no encontrado en tu organización');
-
-    const candidates: RuleCandidate[] = [
-      ...(membership.commissionPlan?.active ? membership.commissionPlan.rules : []).map((r) => ({
-        id: r.id,
-        source: 'PLAN' as const,
-        scopeType: r.scopeType,
-        scopeValue: r.scopeValue,
-        basis: r.basis,
-        calcMethod: r.calcMethod,
-        value: Number(r.value),
-        validFrom: r.validFrom,
-        validTo: r.validTo,
-      })),
-      ...membership.overrideRules.map((r) => ({
-        id: r.id,
-        source: 'OVERRIDE' as const,
-        scopeType: r.scopeType,
-        scopeValue: r.scopeValue,
-        basis: r.basis,
-        calcMethod: r.calcMethod,
-        value: Number(r.value),
-        validFrom: r.validFrom,
-        validTo: r.validTo,
-      })),
-    ];
 
     const scenarios: Array<{ scopeLabel: string; productCategory: string | null; customerGroupId: number | null }> = [
       { scopeLabel: 'General', productCategory: null, customerGroupId: null },
@@ -164,7 +139,7 @@ export class CommissionPlansService {
 
     const results: Array<{ scopeLabel: string; ruleId: number; basis: string; calcMethod: string; value: number }> = [];
     for (const scenario of scenarios) {
-      const resolved = resolveCommissionRule(candidates, {
+      const resolved = resolveEffectiveRule(membership, {
         date,
         productCategory: scenario.productCategory,
         customerGroupId: scenario.customerGroupId,
