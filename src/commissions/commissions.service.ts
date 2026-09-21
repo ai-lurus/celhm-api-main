@@ -4,6 +4,7 @@ import { CommissionStatus } from '@prisma/client';
 import {
   MEMBERSHIP_RULES_INCLUDE,
   RuleSourceMembership,
+  countActiveScopedRules,
   resolveEffectiveRule,
 } from './effective-commission-rule';
 
@@ -284,7 +285,9 @@ export class CommissionsService {
   }
 
   async getSummary(organizationId: number) {
-    // Get users in the organization who are technicians, have a commission rate, or have received commissions
+    // Who gets a card: an employee with an assigned plan (active or not, so a deactivated
+    // plan still shows its warning), any individual rule, the TECNICO or VENDEDOR role, or an
+    // existing commission. The legacy flat rate no longer decides this.
     const users = await this.prisma.user.findMany({
       where: {
         status: 'ACTIVO',
@@ -294,16 +297,11 @@ export class CommissionsService {
               some: {
                 organizationId,
                 status: 'ACTIVO',
-                role: { in: ['TECNICO', 'VENDEDOR'] },
-              },
-            },
-          },
-          {
-            memberships: {
-              some: {
-                organizationId,
-                status: 'ACTIVO',
-                commissionRate: { not: null },
+                OR: [
+                  { role: { in: ['TECNICO', 'VENDEDOR'] } },
+                  { commissionPlanId: { not: null } },
+                  { overrideRules: { some: {} } },
+                ],
               },
             },
           },
@@ -336,6 +334,9 @@ export class CommissionsService {
       },
     });
 
+    // The card evaluates at "now". Preview evaluates a date-only input at the END of that day
+    // in the org timezone, and real sales at their exact timestamp. Those differing instants
+    // are deliberate; a difference between them is not a bug.
     const now = new Date();
 
     return users.map((user) => {
@@ -360,6 +361,8 @@ export class CommissionsService {
           : null,
         commissionPlanName: membership?.commissionPlan?.name ?? null,
         commissionPlanActive: membership?.commissionPlan?.active ?? null,
+        // Category and customer-group rules in force now, shown next to the GENERAL winner.
+        scopedRuleCount: membership ? countActiveScopedRules(membership, now) : 0,
         // Winning GENERAL-scope rule right now, from the same function Preview and real sales use.
         effectiveRule: effective
           ? {

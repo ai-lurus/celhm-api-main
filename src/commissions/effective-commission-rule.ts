@@ -64,3 +64,15 @@ export function resolveEffectiveRule(
 ): ResolveResult | null {
   return resolveCommissionRule(buildRuleCandidates(membership), context);
 }
+
+/**
+ * Rules in force at `date` whose scope is a product category or customer group.
+ * The Comisiones card uses it next to the GENERAL winner so an employee who only has
+ * scoped rules is not shown as "Sin regla". Same validity window the resolver applies.
+ */
+export function countActiveScopedRules(membership: RuleSourceMembership, date: Date): number {
+  return buildRuleCandidates(membership).filter(
+    (rule) =>
+      rule.scopeType !== 'GENERAL' && rule.validFrom <= date && (rule.validTo === null || date <= rule.validTo),
+  ).length;
+}
