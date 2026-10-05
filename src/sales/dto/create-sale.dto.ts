@@ -43,6 +43,11 @@ export class CreateSaleLineDto {
   @IsNumber()
   @Min(0)
   advance?: number;
+
+  @ApiPropertyOptional({ description: 'Número de serie / IMEI del producto vendido en esta línea' })
+  @IsOptional()
+  @IsString()
+  serialNumber?: string;
 }
 
 export class CreatePaymentDto {

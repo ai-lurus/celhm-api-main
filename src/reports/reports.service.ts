@@ -326,5 +326,251 @@ export class ReportsService {
       })),
     };
   }
+
+  // RF-REP-05: Reporte de ventas para comisiones
+  async getCommissionsSalesReport(organizationId: number, filters: {
+    branchId?: number;
+    startDate: Date;
+    endDate: Date;
+  }) {
+    const where: any = {
+      branch: { organizationId },
+      createdAt: {
+        gte: filters.startDate,
+        lte: filters.endDate,
+      },
+      status: 'PAGADO',
+    };
+
+    if (filters.branchId) {
+      where.branchId = filters.branchId;
+    }
+
+    const sales = await this.prisma.sale.findMany({
+      where,
+      include: {
+        branch: { select: { name: true, code: true } },
+        user: { select: { id: true, name: true } },
+        commissions: { select: { amount: true, status: true } },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const rows = sales.map((sale) => {
+      const commissionAmount = sale.commissions.reduce((sum, c) => sum + Number(c.amount), 0);
+      const commissionStatus: 'SIN_COMISION' | 'PENDIENTE' | 'PARCIAL' | 'PAGADA' =
+        sale.commissions.length === 0
+          ? 'SIN_COMISION'
+          : sale.commissions.every((c) => c.status === 'PAGADA')
+            ? 'PAGADA'
+            : sale.commissions.some((c) => c.status === 'PAGADA')
+              ? 'PARCIAL'
+              : 'PENDIENTE';
+
+      return {
+        saleId: sale.id,
+        folio: sale.folio,
+        date: sale.createdAt,
+        branch: sale.branch.name,
+        sellerId: sale.user?.id ?? null,
+        seller: sale.user?.name || 'Sin asignar',
+        subtotal: Number(sale.subtotal),
+        total: Number(sale.total),
+        commissionAmount,
+        commissionStatus,
+      };
+    });
+
+    return {
+      period: {
+        startDate: filters.startDate,
+        endDate: filters.endDate,
+      },
+      salesCount: rows.length,
+      totalSales: rows.reduce((sum, r) => sum + r.total, 0),
+      totalCommissions: rows.reduce((sum, r) => sum + r.commissionAmount, 0),
+      rows,
+    };
+  }
+
+  // RF-REP-06: Reporte de ventas por vendedor
+  async getSalesBySellerReport(organizationId: number, filters: {
+    branchId?: number;
+    sellerId?: number;
+    startDate: Date;
+    endDate: Date;
+    detailLevel: 'TOTALS_BY_SELLER' | 'TOTALS_BY_DOCUMENT' | 'DOCUMENT_DETAILS' | 'DOCUMENT_DETAILS_SERIAL';
+  }) {
+    const where: any = {
+      branch: { organizationId },
+      createdAt: {
+        gte: filters.startDate,
+        lte: filters.endDate,
+      },
+      status: 'PAGADO',
+    };
+
+    if (filters.branchId) {
+      where.branchId = filters.branchId;
+    }
+    if (filters.sellerId) {
+      where.userId = filters.sellerId;
+    }
+
+    const needsLines = filters.detailLevel === 'DOCUMENT_DETAILS' || filters.detailLevel === 'DOCUMENT_DETAILS_SERIAL';
+
+    const sales = await this.prisma.sale.findMany({
+      where,
+      include: {
+        branch: { select: { name: true } },
+        user: { select: { id: true, name: true } },
+        lines: needsLines
+          ? {
+              include: {
+                ticket: { select: { serialNumber: true, imei: true } },
+              },
+            }
+          : false,
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const period = { startDate: filters.startDate, endDate: filters.endDate };
+
+    if (filters.detailLevel === 'TOTALS_BY_SELLER') {
+      const bySeller = new Map<string, { sellerId: number | null; seller: string; salesCount: number; total: number }>();
+      for (const sale of sales) {
+        const key = sale.user ? String(sale.user.id) : 'sin_asignar';
+        const entry = bySeller.get(key) || {
+          sellerId: sale.user?.id ?? null,
+          seller: sale.user?.name || 'Sin asignar',
+          salesCount: 0,
+          total: 0,
+        };
+        entry.salesCount += 1;
+        entry.total += Number(sale.total);
+        bySeller.set(key, entry);
+      }
+      const rows = Array.from(bySeller.values()).sort((a, b) => b.total - a.total);
+      return {
+        period,
+        detailLevel: filters.detailLevel,
+        salesCount: sales.length,
+        totalSales: rows.reduce((sum, r) => sum + r.total, 0),
+        rows,
+      };
+    }
+
+    if (filters.detailLevel === 'TOTALS_BY_DOCUMENT') {
+      const rows = sales.map((sale) => ({
+        saleId: sale.id,
+        folio: sale.folio,
+        date: sale.createdAt,
+        branch: sale.branch.name,
+        sellerId: sale.user?.id ?? null,
+        seller: sale.user?.name || 'Sin asignar',
+        total: Number(sale.total),
+      }));
+      return {
+        period,
+        detailLevel: filters.detailLevel,
+        salesCount: rows.length,
+        totalSales: rows.reduce((sum, r) => sum + r.total, 0),
+        rows,
+      };
+    }
+
+    // DOCUMENT_DETAILS / DOCUMENT_DETAILS_SERIAL: one row per sale line
+    const includeSerial = filters.detailLevel === 'DOCUMENT_DETAILS_SERIAL';
+    const rows: any[] = [];
+    for (const sale of sales) {
+      for (const line of (sale as any).lines) {
+        const row: any = {
+          saleId: sale.id,
+          folio: sale.folio,
+          date: sale.createdAt,
+          branch: sale.branch.name,
+          sellerId: sale.user?.id ?? null,
+          seller: sale.user?.name || 'Sin asignar',
+          description: line.description,
+          qty: line.qty,
+          unitPrice: Number(line.unitPrice),
+          discount: Number(line.discount),
+          total: Number(line.total),
+        };
+        if (includeSerial) {
+          row.serialNumber = line.serialNumber || line.ticket?.serialNumber || line.ticket?.imei || null;
+        }
+        rows.push(row);
+      }
+    }
+
+    return {
+      period,
+      detailLevel: filters.detailLevel,
+      salesCount: sales.length,
+      totalSales: sales.reduce((sum, s) => sum + Number(s.total), 0),
+      rows,
+    };
+  }
+
+  // CSV export shared by the two commission-related reports above.
+  exportCommissionsSalesCsv(report: Awaited<ReturnType<ReportsService['getCommissionsSalesReport']>>) {
+    const header = 'Folio,Fecha,Sucursal,Vendedor,Subtotal,Total,Comisión,Estado Comisión\n';
+    const rows = report.rows.map((r) => [
+      r.folio,
+      r.date.toISOString(),
+      `"${r.branch.replace(/"/g, '""')}"`,
+      `"${r.seller.replace(/"/g, '""')}"`,
+      r.subtotal.toFixed(2),
+      r.total.toFixed(2),
+      r.commissionAmount.toFixed(2),
+      r.commissionStatus,
+    ].join(',')).join('\n');
+    return header + rows;
+  }
+
+  exportSalesBySellerCsv(report: Awaited<ReturnType<ReportsService['getSalesBySellerReport']>>) {
+    if (report.detailLevel === 'TOTALS_BY_SELLER') {
+      const header = 'Vendedor,Num. Ventas,Total\n';
+      const rows = report.rows.map((r: any) => [
+        `"${String(r.seller).replace(/"/g, '""')}"`,
+        r.salesCount,
+        Number(r.total).toFixed(2),
+      ].join(',')).join('\n');
+      return header + rows;
+    }
+    if (report.detailLevel === 'TOTALS_BY_DOCUMENT') {
+      const header = 'Folio,Fecha,Sucursal,Vendedor,Total\n';
+      const rows = report.rows.map((r: any) => [
+        r.folio,
+        new Date(r.date).toISOString(),
+        `"${String(r.branch).replace(/"/g, '""')}"`,
+        `"${String(r.seller).replace(/"/g, '""')}"`,
+        Number(r.total).toFixed(2),
+      ].join(',')).join('\n');
+      return header + rows;
+    }
+    const includeSerial = report.detailLevel === 'DOCUMENT_DETAILS_SERIAL';
+    const header = (includeSerial
+      ? 'Folio,Fecha,Sucursal,Vendedor,Descripción,Cant,Precio Unit,Descuento,Total,Número de Serie\n'
+      : 'Folio,Fecha,Sucursal,Vendedor,Descripción,Cant,Precio Unit,Descuento,Total\n');
+    const rows = report.rows.map((r: any) => {
+      const base = [
+        r.folio,
+        new Date(r.date).toISOString(),
+        `"${String(r.branch).replace(/"/g, '""')}"`,
+        `"${String(r.seller).replace(/"/g, '""')}"`,
+        `"${String(r.description).replace(/"/g, '""')}"`,
+        r.qty,
+        Number(r.unitPrice).toFixed(2),
+        Number(r.discount).toFixed(2),
+        Number(r.total).toFixed(2),
+      ];
+      if (includeSerial) base.push(r.serialNumber || '');
+      return base.join(',');
+    }).join('\n');
+    return header + rows;
+  }
 }
 

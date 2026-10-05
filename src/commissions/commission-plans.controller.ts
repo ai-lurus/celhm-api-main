@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Put, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Put, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -96,18 +96,7 @@ export class CommissionPlansController {
 
   @Get('rules/preview')
   @ApiOperation({ summary: 'Preview which rule would win for an employee across known categories and customer groups' })
-  async preview(@CurrentUser() user: AuthUser, @Query('membershipId', ParseIntPipe) membershipId: number, @Query('date') date?: string) {
-    let parsedDate = new Date();
-    if (date) {
-      parsedDate = new Date(date);
-      if (isNaN(parsedDate.getTime())) {
-        throw new BadRequestException('Formato de fecha inválido; usa ISO 8601 (ej. 2026-06-01)');
-      }
-    }
-    const [categories, groups] = await Promise.all([
-      this.plansService.listKnownCategories(user.organizationId),
-      this.plansService.listKnownCustomerGroupIds(user.organizationId),
-    ]);
-    return this.plansService.preview(membershipId, user.organizationId, parsedDate, categories, groups);
+  preview(@CurrentUser() user: AuthUser, @Query('membershipId', ParseIntPipe) membershipId: number, @Query('date') date?: string) {
+    return this.plansService.previewForDate(user.organizationId, membershipId, date);
   }
 }

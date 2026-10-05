@@ -93,6 +93,7 @@ export class SalesService {
             unitPrice: line.unitPrice,
             discount: line.discount || 0,
             advance: line.advance || 0,
+            serialNumber: line.serialNumber || null,
             total: Number(line.unitPrice) * line.qty - Number(line.discount || 0),
           })),
         },

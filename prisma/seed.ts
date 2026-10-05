@@ -255,7 +255,7 @@ async function main() {
         data: {
           name: productData.name,
           description: productData.description,
-          category: productData.category,
+          categoryLegacy: productData.category,
           brand: productData.brand,
           model: productData.model,
         },
