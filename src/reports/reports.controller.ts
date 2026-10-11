@@ -190,5 +190,48 @@ export class ReportsController {
     res.setHeader('Content-Disposition', `attachment; filename=ventas_por_vendedor_${new Date().toISOString().split('T')[0]}.csv`);
     res.send('﻿' + csv);
   }
+
+  @Get('ventas-por-vendedor')
+  @ApiOperation({ summary: 'Get ventas report with cost/margin detail (RF-REP-07, categoría Ventas)' })
+  @ApiQuery({ name: 'branchId', required: false, type: Number })
+  @ApiQuery({ name: 'startDate', required: true, type: String })
+  @ApiQuery({ name: 'endDate', required: true, type: String })
+  @ApiResponse({ status: 200, description: 'Ventas por vendedor report' })
+  getVentasPorVendedorReport(
+    @CurrentUser() user: AuthUser,
+    @Query('branchId') branchId?: string,
+    @Query('startDate') startDate: string = new Date().toISOString(),
+    @Query('endDate') endDate: string = new Date().toISOString(),
+  ) {
+    return this.reportsService.getVentasPorVendedorReport(user.organizationId, {
+      branchId: branchId ? parseInt(branchId) : undefined,
+      startDate: new Date(startDate),
+      endDate: new Date(endDate),
+    });
+  }
+
+  @Get('ventas-por-vendedor/export')
+  @ApiOperation({ summary: 'Export ventas report with cost/margin detail to CSV' })
+  @ApiQuery({ name: 'branchId', required: false, type: Number })
+  @ApiQuery({ name: 'startDate', required: true, type: String })
+  @ApiQuery({ name: 'endDate', required: true, type: String })
+  @ApiResponse({ status: 200, description: 'CSV file download' })
+  async exportVentasPorVendedorReport(
+    @CurrentUser() user: AuthUser,
+    @Res() res: Response,
+    @Query('branchId') branchId?: string,
+    @Query('startDate') startDate: string = new Date().toISOString(),
+    @Query('endDate') endDate: string = new Date().toISOString(),
+  ) {
+    const report = await this.reportsService.getVentasPorVendedorReport(user.organizationId, {
+      branchId: branchId ? parseInt(branchId) : undefined,
+      startDate: new Date(startDate),
+      endDate: new Date(endDate),
+    });
+    const csv = this.reportsService.exportVentasPorVendedorCsv(report);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename=ventas_detalle_vendedor_${new Date().toISOString().split('T')[0]}.csv`);
+    res.send('﻿' + csv);
+  }
 }
 
