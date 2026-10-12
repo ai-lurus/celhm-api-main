@@ -514,6 +514,95 @@ export class ReportsService {
     };
   }
 
+  // RF-REP-07: Reporte de ventas por vendedor (detalle de línea, con costo) — categoría Ventas
+  async getVentasPorVendedorReport(organizationId: number, filters: {
+    branchId?: number;
+    startDate: Date;
+    endDate: Date;
+  }) {
+    const where: any = {
+      branch: { organizationId },
+      createdAt: {
+        gte: filters.startDate,
+        lte: filters.endDate,
+      },
+      status: 'PAGADO',
+    };
+
+    if (filters.branchId) {
+      where.branchId = filters.branchId;
+    }
+
+    const sales = await this.prisma.sale.findMany({
+      where,
+      include: {
+        branch: { select: { name: true } },
+        user: { select: { id: true, name: true } },
+        customer: { select: { name: true } },
+        payments: { select: { method: true } },
+        lines: {
+          include: {
+            variant: { select: { sku: true, purchasePrice: true } },
+            ticket: {
+              include: {
+                parts: {
+                  where: { costIncluded: true },
+                  select: { unitCost: true, qty: true },
+                },
+              },
+            },
+          },
+        },
+      },
+      orderBy: [{ user: { name: 'asc' } }, { createdAt: 'asc' }],
+    });
+
+    const rows: any[] = [];
+    for (const sale of sales) {
+      const paymentMethod =
+        sale.payments.length === 0
+          ? null
+          : sale.payments.length === 1
+            ? sale.payments[0].method
+            : 'MIXTO';
+
+      for (const line of sale.lines) {
+        const code = line.variant?.sku || null;
+        let cost = 0;
+        if (line.variant) {
+          cost = Number(line.variant.purchasePrice || 0) * line.qty;
+        } else if (line.ticket) {
+          cost = line.ticket.parts.reduce((sum, p) => sum + Number(p.unitCost || 0) * p.qty, 0);
+        }
+
+        rows.push({
+          saleId: sale.id,
+          folio: sale.folio,
+          date: sale.createdAt,
+          branch: sale.branch.name,
+          sellerId: sale.user?.id ?? null,
+          seller: sale.user?.name || 'Sin asignar',
+          customer: sale.customer?.name || 'Cliente de mostrador',
+          code,
+          description: line.description,
+          qty: line.qty,
+          paymentMethod,
+          cost,
+          unitPrice: Number(line.unitPrice),
+          total: Number(line.total),
+        });
+      }
+    }
+
+    return {
+      period: { startDate: filters.startDate, endDate: filters.endDate },
+      salesCount: sales.length,
+      totalCost: rows.reduce((sum, r) => sum + r.cost, 0),
+      totalSales: rows.reduce((sum, r) => sum + r.total, 0),
+      rows,
+    };
+  }
+
   // CSV export shared by the two commission-related reports above.
   exportCommissionsSalesCsv(report: Awaited<ReturnType<ReportsService['getCommissionsSalesReport']>>) {
     const header = 'Folio,Fecha,Sucursal,Vendedor,Subtotal,Total,Comisión,Estado Comisión\n';
@@ -570,6 +659,24 @@ export class ReportsService {
       if (includeSerial) base.push(r.serialNumber || '');
       return base.join(',');
     }).join('\n');
+    return header + rows;
+  }
+
+  exportVentasPorVendedorCsv(report: Awaited<ReturnType<ReportsService['getVentasPorVendedorReport']>>) {
+    const header = 'Vendedor,Folio,Fecha,Cliente,Código,Producto,Cantidad,Método de Pago,Costo,Precio,Importe\n';
+    const rows = report.rows.map((r: any) => [
+      `"${String(r.seller).replace(/"/g, '""')}"`,
+      r.folio,
+      new Date(r.date).toISOString(),
+      `"${String(r.customer).replace(/"/g, '""')}"`,
+      r.code || '',
+      `"${String(r.description).replace(/"/g, '""')}"`,
+      r.qty,
+      r.paymentMethod || '',
+      Number(r.cost).toFixed(2),
+      Number(r.unitPrice).toFixed(2),
+      Number(r.total).toFixed(2),
+    ].join(',')).join('\n');
     return header + rows;
   }
 }
