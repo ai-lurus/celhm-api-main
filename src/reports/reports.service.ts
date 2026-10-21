@@ -327,7 +327,7 @@ export class ReportsService {
     };
   }
 
-  // RF-REP-05: Reporte de ventas para comisiones
+  // RF-REP-05: Reporte de ventas para comisiones (detalle por línea, con costo y comisión)
   async getCommissionsSalesReport(organizationId: number, filters: {
     branchId?: number;
     startDate: Date;
@@ -349,44 +349,83 @@ export class ReportsService {
     const sales = await this.prisma.sale.findMany({
       where,
       include: {
-        branch: { select: { name: true, code: true } },
+        branch: { select: { name: true } },
         user: { select: { id: true, name: true } },
-        commissions: { select: { amount: true, status: true } },
+        customer: { select: { name: true } },
+        payments: { select: { method: true } },
+        lines: {
+          include: {
+            variant: { select: { sku: true, purchasePrice: true } },
+            ticket: {
+              include: {
+                parts: {
+                  where: { costIncluded: true },
+                  select: { unitCost: true, qty: true },
+                },
+              },
+            },
+            commissions: { select: { amount: true, status: true } },
+          },
+        },
       },
-      orderBy: { createdAt: 'asc' },
+      orderBy: [{ user: { name: 'asc' } }, { createdAt: 'asc' }],
     });
 
-    const rows = sales.map((sale) => {
-      const commissionAmount = sale.commissions.reduce((sum, c) => sum + Number(c.amount), 0);
-      const commissionStatus: 'SIN_COMISION' | 'PENDIENTE' | 'PARCIAL' | 'PAGADA' =
-        sale.commissions.length === 0
-          ? 'SIN_COMISION'
-          : sale.commissions.every((c) => c.status === 'PAGADA')
-            ? 'PAGADA'
-            : sale.commissions.some((c) => c.status === 'PAGADA')
-              ? 'PARCIAL'
-              : 'PENDIENTE';
+    const rows: any[] = [];
+    for (const sale of sales) {
+      const paymentMethod =
+        sale.payments.length === 0
+          ? null
+          : sale.payments.length === 1
+            ? sale.payments[0].method
+            : 'MIXTO';
 
-      return {
-        saleId: sale.id,
-        folio: sale.folio,
-        date: sale.createdAt,
-        branch: sale.branch.name,
-        sellerId: sale.user?.id ?? null,
-        seller: sale.user?.name || 'Sin asignar',
-        subtotal: Number(sale.subtotal),
-        total: Number(sale.total),
-        commissionAmount,
-        commissionStatus,
-      };
-    });
+      for (const line of sale.lines) {
+        const code = line.variant?.sku || null;
+        let cost = 0;
+        if (line.variant) {
+          cost = Number(line.variant.purchasePrice || 0) * line.qty;
+        } else if (line.ticket) {
+          cost = line.ticket.parts.reduce((sum, p) => sum + Number(p.unitCost || 0) * p.qty, 0);
+        }
+
+        const commissionAmount = line.commissions.reduce((sum, c) => sum + Number(c.amount), 0);
+        const commissionStatus: 'SIN_COMISION' | 'PENDIENTE' | 'PARCIAL' | 'PAGADA' =
+          line.commissions.length === 0
+            ? 'SIN_COMISION'
+            : line.commissions.every((c) => c.status === 'PAGADA')
+              ? 'PAGADA'
+              : line.commissions.some((c) => c.status === 'PAGADA')
+                ? 'PARCIAL'
+                : 'PENDIENTE';
+
+        rows.push({
+          saleId: sale.id,
+          folio: sale.folio,
+          date: sale.createdAt,
+          branch: sale.branch.name,
+          sellerId: sale.user?.id ?? null,
+          seller: sale.user?.name || 'Sin asignar',
+          customer: sale.customer?.name || 'Cliente de mostrador',
+          code,
+          description: line.description,
+          qty: line.qty,
+          paymentMethod,
+          cost,
+          unitPrice: Number(line.unitPrice),
+          total: Number(line.total),
+          commissionAmount,
+          commissionStatus,
+        });
+      }
+    }
 
     return {
       period: {
         startDate: filters.startDate,
         endDate: filters.endDate,
       },
-      salesCount: rows.length,
+      salesCount: sales.length,
       totalSales: rows.reduce((sum, r) => sum + r.total, 0),
       totalCommissions: rows.reduce((sum, r) => sum + r.commissionAmount, 0),
       rows,
@@ -499,7 +538,9 @@ export class ReportsService {
           total: Number(line.total),
         };
         if (includeSerial) {
-          row.serialNumber = line.serialNumber || line.ticket?.serialNumber || line.ticket?.imei || null;
+          // Solo equipos vía orden de reparación llevan número de serie real; el campo
+          // manual en ventas de producto normal no se usa en la práctica (feedback cliente).
+          row.serialNumber = line.ticket ? (line.ticket.serialNumber || line.ticket.imei || null) : null;
         }
         rows.push(row);
       }
@@ -603,18 +644,22 @@ export class ReportsService {
     };
   }
 
-  // CSV export shared by the two commission-related reports above.
+  // CSV export para el reporte de ventas para comisiones (detalle por línea).
   exportCommissionsSalesCsv(report: Awaited<ReturnType<ReportsService['getCommissionsSalesReport']>>) {
-    const header = 'Folio,Fecha,Sucursal,Vendedor,Subtotal,Total,Comisión,Estado Comisión\n';
-    const rows = report.rows.map((r) => [
+    const header = 'Vendedor,Folio,Fecha,Cliente,Código,Producto,Cantidad,Costo,Precio,Importe,Método de Pago,Comisión\n';
+    const rows = report.rows.map((r: any) => [
+      `"${String(r.seller).replace(/"/g, '""')}"`,
       r.folio,
-      r.date.toISOString(),
-      `"${r.branch.replace(/"/g, '""')}"`,
-      `"${r.seller.replace(/"/g, '""')}"`,
-      r.subtotal.toFixed(2),
-      r.total.toFixed(2),
-      r.commissionAmount.toFixed(2),
-      r.commissionStatus,
+      new Date(r.date).toISOString(),
+      `"${String(r.customer).replace(/"/g, '""')}"`,
+      r.code || '',
+      `"${String(r.description).replace(/"/g, '""')}"`,
+      r.qty,
+      Number(r.cost).toFixed(2),
+      Number(r.unitPrice).toFixed(2),
+      Number(r.total).toFixed(2),
+      r.paymentMethod || '',
+      Number(r.commissionAmount).toFixed(2),
     ].join(',')).join('\n');
     return header + rows;
   }

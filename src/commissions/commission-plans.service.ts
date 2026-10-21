@@ -120,7 +120,7 @@ export class CommissionPlansService {
     membershipId: number,
     organizationId: number,
     date: Date,
-    knownCategories: string[],
+    knownCategories: Array<{ name: string; parentName: string | null }>,
     knownCustomerGroupIds: number[],
   ): Promise<Array<{ scopeLabel: string; ruleId: number; basis: string; calcMethod: string; value: number }>> {
     const membership = await this.prisma.orgMembership.findFirst({
@@ -129,10 +129,25 @@ export class CommissionPlansService {
     });
     if (!membership) throw new NotFoundException('Empleado no encontrado en tu organización');
 
-    const scenarios: Array<{ scopeLabel: string; productCategory: string | null; customerGroupId: number | null }> = [
-      { scopeLabel: 'General', productCategory: null, customerGroupId: null },
-      ...knownCategories.map((c) => ({ scopeLabel: `Categoría: ${c}`, productCategory: c, customerGroupId: null })),
-      ...knownCustomerGroupIds.map((id) => ({ scopeLabel: `Cliente: grupo ${id}`, productCategory: null, customerGroupId: id })),
+    const scenarios: Array<{
+      scopeLabel: string;
+      productCategory: string | null;
+      productCategoryParent: string | null;
+      customerGroupId: number | null;
+    }> = [
+      { scopeLabel: 'General', productCategory: null, productCategoryParent: null, customerGroupId: null },
+      ...knownCategories.map((c) => ({
+        scopeLabel: `Categoría: ${c.name}`,
+        productCategory: c.name,
+        productCategoryParent: c.parentName,
+        customerGroupId: null,
+      })),
+      ...knownCustomerGroupIds.map((id) => ({
+        scopeLabel: `Cliente: grupo ${id}`,
+        productCategory: null,
+        productCategoryParent: null,
+        customerGroupId: id,
+      })),
     ];
 
     const results: Array<{ scopeLabel: string; ruleId: number; basis: string; calcMethod: string; value: number }> = [];
@@ -140,6 +155,7 @@ export class CommissionPlansService {
       const resolved = resolveEffectiveRule(membership, {
         date,
         productCategory: scenario.productCategory,
+        productCategoryParent: scenario.productCategoryParent,
         customerGroupId: scenario.customerGroupId,
       });
       if (resolved) {
@@ -169,21 +185,47 @@ export class CommissionPlansService {
       throw new BadRequestException('Formato de fecha inválido; usa ISO 8601 (ej. 2026-06-01)');
     }
     const [categories, groups] = await Promise.all([
-      this.listKnownCategories(organizationId),
+      this.listCategoriesForScope(),
       this.listKnownCustomerGroupIds(organizationId),
     ]);
     return this.preview(membershipId, organizationId, date, categories, groups);
   }
 
-  async listKnownCategories(organizationId: number): Promise<string[]> {
-    const rows = await this.prisma.product.findMany({
-      where: { deletedAt: null, categoryId: { not: null } },
-      select: { category: { select: { name: true } } },
-      distinct: ['categoryId'],
+  /**
+   * Todas las categorías de producto que existen en Catálogo (padres e hijas), no solo
+   * las que ya tienen un producto asignado directamente. Usadas como opciones de
+   * "Alcance de producto: categoría" al crear una regla de comisión, y como escenarios
+   * de Preview. Las categorías de producto son globales (no están acotadas por
+   * organización, igual que en Catálogo), por eso no se filtra por organizationId.
+   */
+  async listCategoriesForScope(): Promise<Array<{ id: number; name: string; parentId: number | null; parentName: string | null }>> {
+    const categories = await this.prisma.productCategory.findMany({
+      select: { id: true, name: true, parentId: true, parent: { select: { name: true } } },
     });
-    return rows
-      .map((r) => r.category?.name)
-      .filter((name): name is string => Boolean(name));
+
+    const byParent = new Map<number | null, typeof categories>();
+    for (const cat of categories) {
+      const key = cat.parentId;
+      if (!byParent.has(key)) byParent.set(key, []);
+      byParent.get(key)!.push(cat);
+    }
+    byParent.forEach((list) => list.sort((a, b) => a.name.localeCompare(b.name)));
+
+    const ordered: Array<{ id: number; name: string; parentId: number | null; parentName: string | null }> = [];
+    const addChildren = (parentId: number | null) => {
+      for (const cat of byParent.get(parentId) ?? []) {
+        ordered.push({ id: cat.id, name: cat.name, parentId: cat.parentId, parentName: cat.parent?.name ?? null });
+        addChildren(cat.id);
+      }
+    };
+    addChildren(null);
+    return ordered;
+  }
+
+  /** Nombres planos de todas las categorías, para compatibilidad con el endpoint anterior. */
+  async listKnownCategories(_organizationId: number): Promise<string[]> {
+    const categories = await this.listCategoriesForScope();
+    return categories.map((c) => c.name);
   }
 
   async listKnownCustomerGroupIds(organizationId: number): Promise<number[]> {
