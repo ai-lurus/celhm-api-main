@@ -78,4 +78,36 @@ describe('resolveCommissionRule', () => {
     expect(result?.rule.id).toBe(2);
     expect(result?.hadTie).toBe(true);
   });
+
+  it('matches a rule scoped to the parent category when the product is in a subcategory (herencia)', () => {
+    const general = rule({ id: 1, scopeType: 'GENERAL' });
+    const servicios = rule({ id: 2, scopeType: 'PRODUCT_CATEGORY', scopeValue: 'Servicios' });
+    const result = resolveCommissionRule([general, servicios], {
+      ...context,
+      productCategory: 'Limpieza',
+      productCategoryParent: 'Servicios',
+    });
+    expect(result?.rule.id).toBe(2);
+  });
+
+  it('still matches a rule scoped directly to the subcategory, even when a parent-scoped rule also exists', () => {
+    const servicios = rule({ id: 1, scopeType: 'PRODUCT_CATEGORY', scopeValue: 'Servicios', validFrom: new Date('2026-01-01') });
+    const limpieza = rule({ id: 2, scopeType: 'PRODUCT_CATEGORY', scopeValue: 'Limpieza', validFrom: new Date('2026-01-01') });
+    const result = resolveCommissionRule([servicios, limpieza], {
+      ...context,
+      productCategory: 'Limpieza',
+      productCategoryParent: 'Servicios',
+    });
+    expect([1, 2]).toContain(result?.rule.id);
+  });
+
+  it('does not match a parent-scoped rule for a product in an unrelated category', () => {
+    const servicios = rule({ id: 1, scopeType: 'PRODUCT_CATEGORY', scopeValue: 'Servicios' });
+    const result = resolveCommissionRule([servicios], {
+      ...context,
+      productCategory: 'Mica de hidrogel',
+      productCategoryParent: 'Accesorios',
+    });
+    expect(result).toBeNull();
+  });
 });

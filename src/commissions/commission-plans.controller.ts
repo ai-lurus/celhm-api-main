@@ -34,6 +34,12 @@ export class CommissionPlansController {
     return this.plansService.listKnownCategories(user.organizationId);
   }
 
+  @Get('categories/tree')
+  @ApiOperation({ summary: 'List all product categories (parents and children) for the PRODUCT_CATEGORY scope picker' })
+  listCategoryTree() {
+    return this.plansService.listCategoriesForScope();
+  }
+
   @Post('plans')
   @ApiOperation({ summary: 'Create a commission plan template' })
   create(@CurrentUser() user: AuthUser, @Body() dto: CreateCommissionPlanDto) {

@@ -26,7 +26,7 @@ describe('Preview of a rule created the same day (America/Mexico_City)', () => {
   const prisma = {
     organization: { findUnique: jest.fn() },
     orgMembership: { findFirst: jest.fn() },
-    product: { findMany: jest.fn() },
+    productCategory: { findMany: jest.fn() },
     customerGroup: { findMany: jest.fn() },
   };
 
@@ -40,7 +40,7 @@ describe('Preview of a rule created the same day (America/Mexico_City)', () => {
       commissionPlan: null,
       overrideRules: [overrideCreatedAt1600Z],
     });
-    prisma.product.findMany.mockResolvedValue([]);
+    prisma.productCategory.findMany.mockResolvedValue([]);
     prisma.customerGroup.findMany.mockResolvedValue([]);
     controller = new CommissionPlansController(new CommissionPlansService(prisma as any));
   });
