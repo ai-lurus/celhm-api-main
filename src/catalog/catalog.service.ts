@@ -286,11 +286,23 @@ export class CatalogService {
   }
 
   async getCategories() {
-    return this.prisma.productCategory.findMany({
-      where: { parentId: null },
-      include: { children: { orderBy: { name: 'asc' } } },
+    // Profundidad ilimitada: se traen todas las categorías en una sola consulta
+    // (la tabla es pequeña) y se arma el árbol completo en memoria, en vez de pedir
+    // un número fijo de niveles de "children" a Prisma.
+    const all = await this.prisma.productCategory.findMany({
       orderBy: { name: 'asc' },
     });
+
+    const byId = new Map(all.map((cat) => [cat.id, { ...cat, children: [] as any[] }]));
+    const roots: any[] = [];
+    for (const cat of byId.values()) {
+      if (cat.parentId !== null && byId.has(cat.parentId)) {
+        byId.get(cat.parentId)!.children.push(cat);
+      } else {
+        roots.push(cat);
+      }
+    }
+    return roots;
   }
 
   async createCategory(name: string, parentId?: number | null) {
