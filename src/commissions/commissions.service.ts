@@ -22,7 +22,7 @@ export class CommissionsService {
         customer: { select: { groupId: true } },
         lines: {
           include: {
-            variant: { include: { product: { include: { category: true } } } },
+            variant: { include: { product: { include: { category: { include: { parent: true } } } } } },
             ticket: { select: { id: true, assignedUserId: true, userId: true, finalCost: true } },
           },
         },
@@ -102,6 +102,7 @@ export class CommissionsService {
   ): Promise<void> {
     let responsibleUserId: number | null = null;
     let productCategory: string | null = null;
+    let productCategoryParent: string | null = null;
     let saleTotalBase = Number(line.total);
     let profitBase = Number(line.total);
     let isEstimated = false;
@@ -124,6 +125,7 @@ export class CommissionsService {
     } else if (line.variantId && line.variant) {
       responsibleUserId = sale.userId;
       productCategory = line.variant.product?.category?.name ?? null;
+      productCategoryParent = line.variant.product?.category?.parent?.name ?? null;
       const purchasePrice = line.variant.purchasePrice;
       if (purchasePrice === null) {
         isEstimated = true;
@@ -146,6 +148,7 @@ export class CommissionsService {
     const result = resolveEffectiveRule(membership, {
       date: sale.createdAt,
       productCategory,
+      productCategoryParent,
       customerGroupId,
     });
 

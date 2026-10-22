@@ -136,7 +136,7 @@ describe('CommissionPlansService.preview', () => {
       overrideRules: [],
     });
 
-    const result = await service.preview(1, 1, new Date('2026-06-01'), ['Accesorios', 'Configuraciones'], []);
+    const result = await service.preview(1, 1, new Date('2026-06-01'), [{ name: 'Accesorios', parentName: null }, { name: 'Configuraciones', parentName: null }], []);
 
     expect(result).toEqual(
       expect.arrayContaining([
@@ -148,11 +148,11 @@ describe('CommissionPlansService.preview', () => {
   });
 });
 
-describe('CommissionPlansService.listKnownCategories', () => {
+describe('CommissionPlansService.listCategoriesForScope / listKnownCategories', () => {
   let service: CommissionPlansService;
 
   const mockPrisma = {
-    product: { findMany: jest.fn() },
+    productCategory: { findMany: jest.fn() },
   };
 
   beforeEach(async () => {
@@ -163,20 +163,25 @@ describe('CommissionPlansService.listKnownCategories', () => {
     service = module.get(CommissionPlansService);
   });
 
-  it('returns distinct non-null product categories for the organization', async () => {
-    mockPrisma.product.findMany.mockResolvedValue([
-      { category: { name: 'Accesorios' } },
-      { category: { name: 'Pantallas' } },
+  it('returns the full category tree (parents then their children), not just categories with a product', async () => {
+    mockPrisma.productCategory.findMany.mockResolvedValue([
+      { id: 1, name: 'Accesorios', parentId: null, parent: null },
+      { id: 2, name: 'Servicios', parentId: null, parent: null },
+      { id: 3, name: 'Mica de hidrogel', parentId: 1, parent: { name: 'Accesorios' } },
+      { id: 4, name: 'Limpieza', parentId: 2, parent: { name: 'Servicios' } },
     ]);
 
-    const result = await service.listKnownCategories(1);
+    const tree = await service.listCategoriesForScope();
 
-    expect(mockPrisma.product.findMany).toHaveBeenCalledWith({
-      where: { deletedAt: null, categoryId: { not: null } },
-      select: { category: { select: { name: true } } },
-      distinct: ['categoryId'],
-    });
-    expect(result).toEqual(['Accesorios', 'Pantallas']);
+    expect(tree).toEqual([
+      { id: 1, name: 'Accesorios', parentId: null, parentName: null },
+      { id: 3, name: 'Mica de hidrogel', parentId: 1, parentName: 'Accesorios' },
+      { id: 2, name: 'Servicios', parentId: null, parentName: null },
+      { id: 4, name: 'Limpieza', parentId: 2, parentName: 'Servicios' },
+    ]);
+
+    const names = await service.listKnownCategories(1);
+    expect(names).toEqual(['Accesorios', 'Mica de hidrogel', 'Servicios', 'Limpieza']);
   });
 });
 

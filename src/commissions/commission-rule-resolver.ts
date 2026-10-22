@@ -17,6 +17,13 @@ export interface RuleCandidate {
 export interface ResolveContext {
   date: Date;
   productCategory: string | null;
+  /**
+   * Nombre de la categoría padre de productCategory, si productCategory es una
+   * subcategoría. Una regla cuyo scopeValue coincide con la categoría padre aplica
+   * también a todas sus subcategorías (herencia), sin tener que repetir la regla
+   * por cada una.
+   */
+  productCategoryParent?: string | null;
   customerGroupId: number | null;
 }
 
@@ -40,13 +47,18 @@ export function resolveCommissionRule(
         )
       : [];
 
+  const normalize = (value: string) => value.trim().toLowerCase();
+  const categoryNames = [context.productCategory, context.productCategoryParent ?? null]
+    .filter((name): name is string => name !== null)
+    .map(normalize);
+
   const categoryMatches =
-    context.productCategory !== null
+    categoryNames.length > 0
       ? active.filter(
           (r) =>
             r.scopeType === 'PRODUCT_CATEGORY' &&
             r.scopeValue !== null &&
-            r.scopeValue.trim().toLowerCase() === context.productCategory!.trim().toLowerCase(),
+            categoryNames.includes(normalize(r.scopeValue)),
         )
       : [];
 
